@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ import {
   Truck,
   CheckCircle2,
   Clock,
+  AlertCircle,
   TrendingUp,
   TrendingDown,
   ArrowUpRight,
@@ -36,50 +38,23 @@ import {
   BarChart3,
   Target,
   RotateCcw,
+  Send,
+  Ban,
   Edit3,
   Pause,
   XCircle,
   Undo2,
-  Banknote,
-  ShoppingCart,
-  MessageSquare,
+  PenLine,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Order, Shipment } from "@shared/schema";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useDateRange } from "@/contexts/date-range-context";
 import { AIInsightsBanner } from "@/components/ai-insights-banner";
 import { formatPkDateTime } from "@/lib/dateFormat";
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  type TooltipProps,
-} from "recharts";
-import type { ValueType, NameType, Payload } from "recharts/types/component/DefaultTooltipContent";
 
-/* ── Design tokens ──────────────────────────────────────────────────────── */
-const BG = "#090e1a";
-const CARD = "rgba(13,19,34,0.85)";
-const BORDER = "rgba(255,255,255,0.07)";
-const TEXT_MUTED = "rgba(255,255,255,0.4)";
-const TEXT_DIM = "rgba(255,255,255,0.65)";
-const TEXT = "rgba(255,255,255,0.92)";
-
-const darkCard = {
-  background: CARD,
-  border: `1px solid ${BORDER}`,
-  borderRadius: "16px",
-  backdropFilter: "blur(12px)",
-};
-
-/* ── Helpers ─────────────────────────────────────────────────────────────── */
 const DEFAULT_TAG_CONFIG = { confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" };
 
 function getRoboTagStyle(tag: string, tagConfig?: { confirm: string; pending: string; cancel: string } | null): string | null {
@@ -116,6 +91,72 @@ interface RecentOrder extends Order {
   shipment?: Shipment;
 }
 
+function StatCard({
+  title,
+  value,
+  icon: Icon,
+  trend,
+  trendLabel,
+  subtitle,
+  iconColor = "text-primary",
+  isLoading = false,
+}: {
+  title: string;
+  value: string | number;
+  icon: React.ElementType;
+  trend?: number;
+  trendLabel?: string;
+  subtitle?: string;
+  iconColor?: string;
+  isLoading?: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-7 w-16" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1 min-w-0">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+            <p className="text-2xl font-semibold">{value}</p>
+            {trend !== undefined && (
+              <div className="flex items-center gap-1 text-xs">
+                {trend >= 0 ? (
+                  <TrendingUp className="w-3 h-3 text-green-600 dark:text-green-400" />
+                ) : (
+                  <TrendingDown className="w-3 h-3 text-red-600 dark:text-red-400" />
+                )}
+                <span className={trend >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                  {trend >= 0 ? "+" : ""}{trend}%
+                </span>
+                <span className="text-muted-foreground">{trendLabel}</span>
+              </div>
+            )}
+            {subtitle && (
+              <p className="text-xs text-muted-foreground">{subtitle}</p>
+            )}
+          </div>
+          <div className={`${iconColor} opacity-60`}>
+            <Icon className="w-5 h-5" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function truncateStatus(status: string, wordCount: number = 3): string {
   const words = status.split(/\s+/);
   if (words.length <= wordCount) return status;
@@ -124,18 +165,19 @@ function truncateStatus(status: string, wordCount: number = 3): string {
 
 function getStatusBadgeColor(workflowStatus: string | null | undefined): string {
   switch (workflowStatus) {
-    case 'BOOKED': return "bg-blue-500/20 text-blue-300 border-blue-500/30";
-    case 'FULFILLED': return "bg-indigo-500/20 text-indigo-300 border-indigo-500/30";
-    case 'DELIVERED': return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
-    case 'RETURN': return "bg-red-500/20 text-red-300 border-red-500/30";
-    case 'CANCELLED': return "bg-red-500/20 text-red-300 border-red-500/30";
-    default: return "bg-white/10 text-white/50 border-white/15";
+    case 'BOOKED': return "bg-blue-500/10 text-blue-600 border-blue-500/20";
+    case 'FULFILLED': return "bg-indigo-500/10 text-indigo-600 border-indigo-500/20";
+    case 'DELIVERED': return "bg-green-500/10 text-green-600 border-green-500/20";
+    case 'RETURN': return "bg-red-500/10 text-red-600 border-red-500/20";
+    case 'CANCELLED': return "bg-red-500/10 text-red-600 border-red-500/20";
+    default: return "bg-gray-500/10 text-gray-600 border-gray-500/20";
   }
 }
 
 function getStatusBadge(status: string, workflowStatus?: string | null) {
   const color = getStatusBadgeColor(workflowStatus);
   const label = truncateStatus(status);
+
   return (
     <Badge className={color} title={status}>
       {label}
@@ -144,20 +186,27 @@ function getStatusBadge(status: string, workflowStatus?: string | null) {
 }
 
 const WORKFLOW_STAGE_LABELS: Record<string, string> = {
-  NEW: "New", PENDING: "Pending", HOLD: "Hold", READY_TO_SHIP: "Ready to Ship",
-  BOOKED: "Booked", FULFILLED: "Fulfilled", DELIVERED: "Delivered", RETURN: "Return", CANCELLED: "Cancelled",
+  NEW: "New",
+  PENDING: "Pending",
+  HOLD: "Hold",
+  READY_TO_SHIP: "Ready to Ship",
+  BOOKED: "Booked",
+  FULFILLED: "Fulfilled",
+  DELIVERED: "Delivered",
+  RETURN: "Return",
+  CANCELLED: "Cancelled",
 };
 
-const WORKFLOW_CHIP_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  NEW:          { bg: "rgba(148,163,184,0.12)", text: "#94a3b8", border: "rgba(148,163,184,0.2)" },
-  PENDING:      { bg: "rgba(251,191,36,0.12)",  text: "#fbbf24", border: "rgba(251,191,36,0.25)" },
-  HOLD:         { bg: "rgba(251,146,60,0.12)",  text: "#fb923c", border: "rgba(251,146,60,0.25)" },
-  READY_TO_SHIP:{ bg: "rgba(59,130,246,0.12)",  text: "#60a5fa", border: "rgba(59,130,246,0.25)" },
-  BOOKED:       { bg: "rgba(99,102,241,0.12)",  text: "#818cf8", border: "rgba(99,102,241,0.25)" },
-  FULFILLED:    { bg: "rgba(168,85,247,0.12)",  text: "#c084fc", border: "rgba(168,85,247,0.25)" },
-  DELIVERED:    { bg: "rgba(16,185,129,0.12)",  text: "#34d399", border: "rgba(16,185,129,0.25)" },
-  RETURN:       { bg: "rgba(239,68,68,0.12)",   text: "#f87171", border: "rgba(239,68,68,0.25)" },
-  CANCELLED:    { bg: "rgba(239,68,68,0.10)",   text: "#f87171", border: "rgba(239,68,68,0.2)"  },
+const WORKFLOW_STAGE_COLORS: Record<string, string> = {
+  NEW: "bg-gray-500/10 text-gray-600 border-gray-500/20",
+  PENDING: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+  HOLD: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  READY_TO_SHIP: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  BOOKED: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+  FULFILLED: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  DELIVERED: "bg-green-500/10 text-green-600 border-green-500/20",
+  RETURN: "bg-red-500/10 text-red-600 border-red-500/20",
+  CANCELLED: "bg-red-500/10 text-red-600 border-red-500/20",
 };
 
 function getStageFeatures(order: Order): string {
@@ -170,96 +219,19 @@ function getStageFeatures(order: Order): string {
       return [order.courierName, order.courierTracking, "Delivered"].filter(Boolean).join(" | ");
     case "RETURN":
       return [order.courierName, order.courierTracking, order.shipmentStatus ? truncateStatus(order.shipmentStatus) : "Return"].filter(Boolean).join(" | ");
-    case "CANCELLED": return "Cancelled";
-    case "PENDING": return order.pendingReasonType || "Pending review";
-    case "HOLD": return order.remark || "On hold";
-    case "READY_TO_SHIP": return "Awaiting booking";
-    default: return order.fulfillmentStatus || "";
+    case "CANCELLED":
+      return "Cancelled";
+    case "PENDING":
+      return order.pendingReasonType || "Pending review";
+    case "HOLD":
+      return order.remark || "On hold";
+    case "READY_TO_SHIP":
+      return "Awaiting booking";
+    default:
+      return order.fulfillmentStatus || "";
   }
 }
 
-/* ── Dark KPI card ───────────────────────────────────────────────────────── */
-function KpiCard({
-  title, value, icon: Icon, trend, trendLabel, subtitle, accentColor, isLoading,
-}: {
-  title: string; value: string | number; icon: React.ElementType;
-  trend?: number; trendLabel?: string; subtitle?: string;
-  accentColor?: string; isLoading?: boolean;
-}) {
-  const accent = accentColor || "#3b82f6";
-  if (isLoading) {
-    return (
-      <div style={{ ...darkCard, padding: "20px" }}>
-        <div className="space-y-2">
-          <Skeleton className="h-3 w-24 bg-white/10" />
-          <Skeleton className="h-8 w-20 bg-white/10" />
-          <Skeleton className="h-3 w-32 bg-white/10" />
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div style={{ ...darkCard, border: "none", borderTop: `1px solid ${BORDER}`, borderRight: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, borderLeft: `3px solid ${accent}`, padding: "20px" }}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1 min-w-0 flex-1">
-          <p className="text-xs font-medium uppercase tracking-wider" style={{ color: TEXT_MUTED }}>{title}</p>
-          <p className="text-3xl font-bold" style={{ color: TEXT }}>{value}</p>
-          {trend !== undefined && (
-            <div className="flex items-center gap-1.5 text-xs mt-1">
-              {trend >= 0
-                ? <TrendingUp className="w-3 h-3" style={{ color: "#10b981" }} />
-                : <TrendingDown className="w-3 h-3" style={{ color: "#f87171" }} />}
-              <span style={{ color: trend >= 0 ? "#10b981" : "#f87171" }}>{trend >= 0 ? "+" : ""}{trend}%</span>
-              {trendLabel && <span style={{ color: TEXT_MUTED }}>{trendLabel}</span>}
-            </div>
-          )}
-          {subtitle && <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>{subtitle}</p>}
-        </div>
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: `${accent}20` }}>
-          <Icon className="w-5 h-5" style={{ color: accent }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Horizontal progress bar metric ─────────────────────────────────────── */
-function MetricBar({
-  label, value, subtitle, color,
-}: { label: string; value: number; subtitle?: string; color: string }) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium" style={{ color: TEXT_DIM }}>{label}</span>
-        <span className="text-sm font-bold" style={{ color: TEXT }}>{value}%</span>
-      </div>
-      <div className="h-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.07)" }}>
-        <div
-          className="h-1.5 rounded-full transition-all duration-700"
-          style={{ width: `${Math.min(value, 100)}%`, background: color }}
-        />
-      </div>
-      {subtitle && <p className="text-xs" style={{ color: TEXT_MUTED }}>{subtitle}</p>}
-    </div>
-  );
-}
-
-/* ── Custom recharts tooltip ─────────────────────────────────────────────── */
-function DarkTooltip({ active, payload, label }: TooltipProps<ValueType, NameType>) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div style={{ background: "#0d1322", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 14px" }}>
-      <p style={{ color: TEXT_MUTED, fontSize: "11px", marginBottom: "4px" }}>{label}</p>
-      {(payload as Payload<ValueType, NameType>[]).map((p, i) => (
-        <p key={i} style={{ color: p.color, fontSize: "13px", fontWeight: 600 }}>
-          {p.name}: {p.value}
-        </p>
-      ))}
-    </div>
-  );
-}
-
-/* ── Order Search Section (full logic unchanged, dark styled) ──────────── */
 function OrderSearchSection() {
   const [searchOrderNumber, setSearchOrderNumber] = useState("");
   const [searchTracking, setSearchTracking] = useState("");
@@ -324,7 +296,10 @@ function OrderSearchSection() {
       const res = await apiRequest("POST", `/api/orders/${orderId}/workflow`, { action, ...extra });
       return res.json();
     },
-    onSuccess: () => { invalidateOrderQueries(); toast({ title: "Order updated" }); },
+    onSuccess: () => {
+      invalidateOrderQueries();
+      toast({ title: "Order updated" });
+    },
   });
 
   const customerUpdateMutation = useMutation({
@@ -332,7 +307,11 @@ function OrderSearchSection() {
       const res = await apiRequest("PATCH", `/api/orders/${orderId}/customer`, data);
       return res.json();
     },
-    onSuccess: () => { invalidateOrderQueries(); setEditingOrder(null); toast({ title: "Customer info updated" }); },
+    onSuccess: () => {
+      invalidateOrderQueries();
+      setEditingOrder(null);
+      toast({ title: "Customer info updated" });
+    },
   });
 
   const updateRemarkMutation = useMutation({
@@ -340,8 +319,14 @@ function OrderSearchSection() {
       const response = await apiRequest("PATCH", `/api/orders/${orderId}/remark`, { value });
       return response.json();
     },
-    onSuccess: () => { toast({ title: "Remark Updated" }); invalidateOrderQueries(); setRemarkDialogOpen(false); },
-    onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
+    onSuccess: () => {
+      toast({ title: "Remark Updated" });
+      invalidateOrderQueries();
+      setRemarkDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const cancelBookingMutation = useMutation({
@@ -363,8 +348,12 @@ function OrderSearchSection() {
       try {
         const raw = err.message || "";
         const jsonPart = raw.includes(": {") ? raw.substring(raw.indexOf(": {") + 2) : raw.includes(":{") ? raw.substring(raw.indexOf(":{") + 1) : "";
-        if (jsonPart) { const parsed = JSON.parse(jsonPart); description = parsed.message || description; }
-        else if (raw) { description = raw.replace(/^\d+:\s*/, ""); }
+        if (jsonPart) {
+          const parsed = JSON.parse(jsonPart);
+          description = parsed.message || description;
+        } else if (raw) {
+          description = raw.replace(/^\d+:\s*/, "");
+        }
       } catch {
         const raw = err.message || "";
         description = raw.replace(/^\d+:\s*/, "") || description;
@@ -388,7 +377,11 @@ function OrderSearchSection() {
       }
       setCancelConfirm(null);
     },
-    onError: (err: any) => { invalidateOrderQueries(); toast({ title: "Cannot cancel", description: err.message || "Failed to cancel on Shopify", variant: "destructive" }); setCancelConfirm(null); },
+    onError: (err: any) => {
+      invalidateOrderQueries();
+      toast({ title: "Cannot cancel", description: err.message || "Failed to cancel on Shopify", variant: "destructive" });
+      setCancelConfirm(null);
+    },
   });
 
   const handleSingleAction = useCallback((orderId: string, action: string) => {
@@ -417,566 +410,774 @@ function OrderSearchSection() {
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
 
-  const handleClear = () => { setSearchOrderNumber(""); setSearchTracking(""); setSearchName(""); setSearchPhone(""); };
+  const handleClear = () => {
+    setSearchOrderNumber("");
+    setSearchTracking("");
+    setSearchName("");
+    setSearchPhone("");
+  };
+
   const hasAnyInput = searchOrderNumber || searchTracking || searchName || searchPhone;
 
   const hasShipmentColumns = (stage: string) => ["BOOKED", "FULFILLED", "DELIVERED", "RETURN"].includes(stage);
+  const hasAddressProducts = (stage: string) => ["NEW", "PENDING"].includes(stage);
 
-  const renderActionButtons = (order: Order, stage: string) => (
-    <div className="flex items-center justify-end gap-1">
-      {(stage === "NEW" || stage === "PENDING" || stage === "HOLD") && (
-        <Button size="icon" variant="ghost" className="h-7 w-7 text-green-400 hover:text-green-300"
-          onClick={() => handleSingleAction(order.id, stage === "HOLD" ? "release-hold" : stage === "PENDING" ? "fix-confirm" : "confirm")}
-          disabled={isPending} title={stage === "HOLD" ? "Release" : "Confirm"}
-          data-testid={`button-search-confirm-${order.id}`}>
-          <CheckCircle2 className="w-4 h-4" />
-        </Button>
-      )}
-      {(stage === "NEW" || stage === "PENDING" || stage === "READY_TO_SHIP" || stage === "BOOKED" || stage === "FULFILLED") && (
-        <Button size="icon" variant="ghost" className="h-7 w-7 text-white/50 hover:text-white"
-          onClick={() => { setEditingOrder(order.id); setEditName(order.customerName || ""); setEditPhone(order.customerPhone || ""); setEditAddress(order.shippingAddress || ""); setEditCity(order.city || ""); }}
-          title="Edit" data-testid={`button-search-edit-${order.id}`}>
-          <Edit3 className="w-4 h-4" />
-        </Button>
-      )}
-      {(stage === "NEW" || stage === "PENDING") && (
-        <Button size="icon" variant="ghost" className="h-7 w-7 text-purple-400 hover:text-purple-300"
-          onClick={() => handleSingleAction(order.id, "hold")} disabled={isPending} title="Hold"
-          data-testid={`button-search-hold-${order.id}`}>
-          <Pause className="w-4 h-4" />
-        </Button>
-      )}
-      {stage === "HOLD" && (
-        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-400 hover:text-amber-300"
-          onClick={() => handleSingleAction(order.id, "move-to-pending")} disabled={isPending}
-          data-testid={`button-search-to-pending-${order.id}`}>
-          <Clock className="w-3.5 h-3.5 mr-1" />Pending
-        </Button>
-      )}
-      {stage === "READY_TO_SHIP" && (
-        <>
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-400 hover:text-amber-300"
-            onClick={() => handleSingleAction(order.id, "pending")} disabled={isPending} title="Move to Pending"
-            data-testid={`button-search-pending-rts-${order.id}`}>
-            <Clock className="w-3.5 h-3.5 mr-1" />Pending
+  const renderActionButtons = (order: Order, stage: string) => {
+    return (
+      <div className="flex items-center justify-end gap-1">
+        {(stage === "NEW" || stage === "PENDING" || stage === "HOLD") && (
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600"
+            onClick={() => handleSingleAction(order.id, stage === "HOLD" ? "release-hold" : stage === "PENDING" ? "fix-confirm" : "confirm")}
+            disabled={isPending}
+            title={stage === "HOLD" ? "Release" : "Confirm"}
+            data-testid={`button-search-confirm-${order.id}`}>
+            <CheckCircle2 className="w-4 h-4" />
           </Button>
-          <Button size="icon" variant="ghost" className="h-7 w-7 text-purple-400 hover:text-purple-300"
-            onClick={() => handleSingleAction(order.id, "hold")} disabled={isPending} title="Hold"
-            data-testid={`button-search-hold-rts-${order.id}`}>
+        )}
+        {(stage === "NEW" || stage === "PENDING" || stage === "READY_TO_SHIP" || stage === "BOOKED" || stage === "FULFILLED") && (
+          <Button size="icon" variant="ghost" className="h-7 w-7"
+            onClick={() => {
+              setEditingOrder(order.id);
+              setEditName(order.customerName || "");
+              setEditPhone(order.customerPhone || "");
+              setEditAddress(order.shippingAddress || "");
+              setEditCity(order.city || "");
+            }}
+            title="Edit"
+            data-testid={`button-search-edit-${order.id}`}>
+            <Edit3 className="w-4 h-4" />
+          </Button>
+        )}
+        {(stage === "NEW" || stage === "PENDING") && (
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-purple-600"
+            onClick={() => handleSingleAction(order.id, "hold")}
+            disabled={isPending}
+            title="Hold"
+            data-testid={`button-search-hold-${order.id}`}>
             <Pause className="w-4 h-4" />
           </Button>
-        </>
-      )}
-      {stage === "BOOKED" && (
-        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-400 hover:text-red-300"
-          onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "courier", orderNumber: order.orderNumber })}
-          disabled={cancelBookingMutation.isPending} data-testid={`button-search-cancel-awb-${order.id}`}>
-          <Undo2 className="w-3.5 h-3.5 mr-1" />Cancel AWB
-        </Button>
-      )}
-      {order.shopifyOrderId && !order.cancelledAt && stage === "BOOKED" && (
-        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-orange-400 hover:text-orange-300"
-          onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
-          disabled={cancelShopifyMutation.isPending} data-testid={`button-search-cancel-shopify-${order.id}`}>
-          <XCircle className="w-3.5 h-3.5 mr-1" />Cancel Shopify
-        </Button>
-      )}
-      {stage === "CANCELLED" && order.shopifyOrderId && !(order as any).isShopifyCancelled && (
-        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-orange-400 hover:text-orange-300"
-          onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
-          disabled={cancelShopifyMutation.isPending} data-testid={`button-search-cancel-shopify-cancelled-${order.id}`}>
-          <XCircle className="w-3.5 h-3.5 mr-1" />Cancel on Shopify
-        </Button>
-      )}
-      <Button size="icon" variant="ghost" className="h-7 w-7 text-yellow-400/70 hover:text-yellow-300"
-        onClick={() => openRemarkDialog(order)} title="Remark"
-        data-testid={`button-search-remark-${order.id}`}>
-        <MessageSquare className="w-4 h-4" />
-      </Button>
-      {stage !== "NEW" && stage !== "BOOKED" && stage !== "FULFILLED" && stage !== "DELIVERED" && stage !== "RETURN" && order.previousWorkflowStatus && (
-        <Button size="icon" variant="ghost" className="h-7 w-7 text-white/30 hover:text-white/60"
-          onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })} disabled={isPending} title="Revert"
-          data-testid={`button-search-revert-${order.id}`}>
-          <Undo2 className="w-4 h-4" />
-        </Button>
-      )}
-      {(stage === "NEW" || stage === "PENDING" || stage === "HOLD" || stage === "READY_TO_SHIP") && (
-        <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-400 hover:text-red-300"
-          onClick={() => handleSingleAction(order.id, "cancel")} disabled={isPending}
-          data-testid={`button-search-cancel-${order.id}`}>
-          <XCircle className="w-3.5 h-3.5" />
-        </Button>
-      )}
-    </div>
-  );
-
-  const inputClass = "text-sm bg-white/5 border-white/10 text-white placeholder:text-white/30 focus-visible:ring-blue-500/40 focus-visible:border-blue-400/40";
+        )}
+        {stage === "HOLD" && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
+            onClick={() => handleSingleAction(order.id, "move-to-pending")}
+            disabled={isPending}
+            data-testid={`button-search-to-pending-${order.id}`}>
+            <Clock className="w-3.5 h-3.5 mr-1" />Pending
+          </Button>
+        )}
+        {stage === "READY_TO_SHIP" && (
+          <>
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-600"
+              onClick={() => handleSingleAction(order.id, "pending")}
+              disabled={isPending}
+              title="Move to Pending"
+              data-testid={`button-search-pending-rts-${order.id}`}>
+              <Clock className="w-3.5 h-3.5 mr-1" />Pending
+            </Button>
+            <Button size="icon" variant="ghost" className="h-7 w-7 text-purple-600"
+              onClick={() => handleSingleAction(order.id, "hold")}
+              disabled={isPending}
+              title="Hold"
+              data-testid={`button-search-hold-rts-${order.id}`}>
+              <Pause className="w-4 h-4" />
+            </Button>
+          </>
+        )}
+        {stage === "BOOKED" && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
+            onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "courier", orderNumber: order.orderNumber })}
+            disabled={cancelBookingMutation.isPending}
+            data-testid={`button-search-cancel-awb-${order.id}`}>
+            <Undo2 className="w-3.5 h-3.5 mr-1" />Cancel AWB
+          </Button>
+        )}
+        {order.shopifyOrderId && !order.cancelledAt && stage === "BOOKED" && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-orange-600"
+            onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
+            disabled={cancelShopifyMutation.isPending}
+            data-testid={`button-search-cancel-shopify-${order.id}`}>
+            <XCircle className="w-3.5 h-3.5 mr-1" />Cancel Shopify
+          </Button>
+        )}
+        {stage === "CANCELLED" && order.shopifyOrderId && !(order as any).isShopifyCancelled && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-orange-600"
+            onClick={() => setCancelConfirm({ open: true, orderId: order.id, type: "shopify", orderNumber: order.orderNumber })}
+            disabled={cancelShopifyMutation.isPending}
+            data-testid={`button-search-cancel-shopify-cancelled-${order.id}`}>
+            <XCircle className="w-3.5 h-3.5 mr-1" />Cancel on Shopify
+          </Button>
+        )}
+        {stage !== "NEW" && stage !== "BOOKED" && stage !== "FULFILLED" && stage !== "DELIVERED" && stage !== "RETURN" && order.previousWorkflowStatus && (
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground"
+            onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })}
+            disabled={isPending}
+            title="Revert"
+            data-testid={`button-search-revert-${order.id}`}>
+            <Undo2 className="w-4 h-4" />
+          </Button>
+        )}
+        {(stage === "NEW" || stage === "PENDING" || stage === "HOLD" || stage === "READY_TO_SHIP") && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-red-600"
+            onClick={() => handleSingleAction(order.id, "cancel")}
+            disabled={isPending}
+            data-testid={`button-search-cancel-${order.id}`}>
+            <XCircle className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
-      <div style={darkCard} className="p-5">
-        <div className="flex items-center justify-between gap-2 mb-4">
-          <div className="flex items-center gap-2">
-            <Search className="w-4 h-4" style={{ color: "#60a5fa" }} />
-            <h3 className="text-sm font-semibold" style={{ color: TEXT }}>Order Search</h3>
-          </div>
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-sm font-medium">
+            Order Search
+          </CardTitle>
           {hasAnyInput && (
-            <Button variant="ghost" size="sm" onClick={handleClear} className="text-white/40 hover:text-white/70 h-7 px-2 text-xs" data-testid="button-clear-search">
-              <X className="w-3.5 h-3.5 mr-1" />Clear
+            <Button variant="ghost" size="sm" onClick={handleClear} data-testid="button-clear-search">
+              <X className="w-4 h-4 mr-1" />
+              Clear
             </Button>
           )}
         </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="space-y-1">
-            <label className="text-xs font-medium" style={{ color: TEXT_MUTED }}>Order ID</label>
+            <label className="text-xs font-medium text-muted-foreground">Order ID</label>
             <div className="relative">
-              <Package className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: TEXT_MUTED }} />
-              <Input value={searchOrderNumber} onChange={(e) => setSearchOrderNumber(e.target.value)} placeholder="e.g. 23409" className={`${inputClass} pl-8`} data-testid="input-search-order-id" />
+              <Package className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={searchOrderNumber}
+                onChange={(e) => setSearchOrderNumber(e.target.value)}
+                placeholder="e.g. 23409, 23410"
+                className="pl-8 text-sm"
+                data-testid="input-search-order-id"
+              />
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium" style={{ color: TEXT_MUTED }}>Tracking Number</label>
+            <label className="text-xs font-medium text-muted-foreground">Tracking Number</label>
             <div className="relative">
-              <Truck className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: TEXT_MUTED }} />
-              <Input value={searchTracking} onChange={(e) => setSearchTracking(e.target.value)} placeholder="e.g. PW751350" className={`${inputClass} pl-8`} data-testid="input-search-tracking" />
+              <Truck className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={searchTracking}
+                onChange={(e) => setSearchTracking(e.target.value)}
+                placeholder="e.g. PW751350, PW751351"
+                className="pl-8 text-sm"
+                data-testid="input-search-tracking"
+              />
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium" style={{ color: TEXT_MUTED }}>Customer Name</label>
+            <label className="text-xs font-medium text-muted-foreground">Customer Name</label>
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: TEXT_MUTED }} />
-              <Input value={searchName} onChange={(e) => setSearchName(e.target.value)} placeholder="Search name" className={`${inputClass} pl-8`} data-testid="input-search-name" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+                placeholder="e.g. Ahmed"
+                className="pl-8 text-sm"
+                data-testid="input-search-name"
+              />
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium" style={{ color: TEXT_MUTED }}>Phone Number</label>
+            <label className="text-xs font-medium text-muted-foreground">Contact Number</label>
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: TEXT_MUTED }} />
-              <Input value={searchPhone} onChange={(e) => setSearchPhone(e.target.value)} placeholder="Search phone" className={`${inputClass} pl-8`} data-testid="input-search-phone" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={searchPhone}
+                onChange={(e) => setSearchPhone(e.target.value)}
+                placeholder="e.g. 03001234567"
+                className="pl-8 text-sm"
+                data-testid="input-search-phone"
+              />
             </div>
           </div>
         </div>
 
         {hasSearch && (
-          <div className="mt-4">
+          <div className="border rounded-md">
             {isLoading ? (
-              <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full bg-white/5" />)}</div>
+              <div className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Searching...
+              </div>
             ) : results.length === 0 ? (
-              <p className="text-center py-6 text-sm" style={{ color: TEXT_MUTED }}>No orders found</p>
+              <div className="p-6 text-sm text-muted-foreground text-center" data-testid="text-no-results">
+                No orders found matching your search criteria
+              </div>
             ) : (
-              <div className="space-y-4">
+              <div className="max-h-[600px] overflow-y-auto">
                 {sortedStages.map(stage => {
-                  const orders = groupedResults[stage];
-                  const chipStyle = WORKFLOW_CHIP_COLORS[stage] || WORKFLOW_CHIP_COLORS.NEW;
+                  const stageOrders = groupedResults[stage];
                   return (
-                    <div key={stage}>
-                      <div className="flex items-center gap-2 mb-2 px-1">
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: chipStyle.bg, color: chipStyle.text, border: `1px solid ${chipStyle.border}` }}>
+                    <div key={stage} data-testid={`search-group-${stage}`}>
+                      <div className="sticky top-0 z-10 bg-muted px-4 py-1.5 border-b flex items-center gap-2">
+                        <Badge className={`text-[10px] ${WORKFLOW_STAGE_COLORS[stage] || ""}`}>
                           {WORKFLOW_STAGE_LABELS[stage] || stage}
-                        </span>
-                        <span className="text-xs" style={{ color: TEXT_MUTED }}>{orders.length} order{orders.length !== 1 ? "s" : ""}</span>
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">{stageOrders.length} order{stageOrders.length !== 1 ? "s" : ""}</span>
                       </div>
-                      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr style={{ background: "rgba(255,255,255,0.04)", color: TEXT_MUTED }}>
-                              <th className="text-left px-3 py-2 font-medium">Order</th>
-                              <th className="text-left px-3 py-2 font-medium">Customer</th>
-                              <th className="text-left px-3 py-2 font-medium hidden sm:table-cell">Amount</th>
-                              {hasShipmentColumns(stage) && <th className="text-left px-3 py-2 font-medium hidden md:table-cell">Shipment</th>}
-                              <th className="text-right px-3 py-2 font-medium">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {orders.map((order, i) => (
-                              <tr key={order.id} style={{ borderTop: i > 0 ? "1px solid rgba(255,255,255,0.04)" : "none" }} className="hover:bg-white/3 transition-colors">
-                                <td className="px-3 py-2.5">
-                                  <Link href={`/orders/detail/${order.id}`}>
-                                    <span className="font-mono font-semibold cursor-pointer hover:text-blue-400 transition-colors" style={{ color: "#60a5fa" }}>
-                                      #{String(order.orderNumber || '').replace(/^#/, '')}
-                                    </span>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Order</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Customer</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs hidden md:table-cell">City</th>
+                            {hasAddressProducts(stage) && (
+                              <>
+                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Address</th>
+                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Products</th>
+                              </>
+                            )}
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Amount (PKR)</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground text-xs hidden lg:table-cell w-[40px]">Items</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs hidden md:table-cell max-w-[100px]">Tags</th>
+                            {stage === "PENDING" && (
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Reason</th>
+                            )}
+                            {stage === "HOLD" && (
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Hold Until</th>
+                            )}
+                            {hasShipmentColumns(stage) && (
+                              <>
+                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Courier</th>
+                                <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Status</th>
+                              </>
+                            )}
+                            {stage === "CANCELLED" && (
+                              <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Reason</th>
+                            )}
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground text-xs">Remark</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground text-xs">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stageOrders.map(order => (
+                            <tr key={order.id} className="border-b transition-colors hover-elevate" data-testid={`search-result-${order.id}`}>
+                              <td className="px-3 py-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <Link href={`/orders/detail/${order.id}`} className="font-medium text-sm hover:underline" data-testid={`link-search-order-${order.id}`}>
+                                    {String(order.orderNumber || '').replace(/^#/, '')}
                                   </Link>
-                                  {order.orderDate && <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>{formatPkDateTime(order.orderDate)}</p>}
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  <p style={{ color: TEXT_DIM }}>{order.customerName || "—"}</p>
-                                  {order.city && <p style={{ color: TEXT_MUTED }}>{order.city}</p>}
-                                </td>
-                                <td className="px-3 py-2.5 hidden sm:table-cell">
-                                  {order.totalAmount && <p style={{ color: TEXT_DIM }}>PKR {order.totalAmount}</p>}
-                                  <p style={{ color: TEXT_MUTED }} className="capitalize">{order.paymentMethod || "cod"}</p>
-                                </td>
-                                {hasShipmentColumns(stage) && (
-                                  <td className="px-3 py-2.5 hidden md:table-cell">
-                                    <p style={{ color: TEXT_MUTED }}>{getStageFeatures(order)}</p>
-                                  </td>
-                                )}
-                                <td className="px-3 py-2.5">
-                                  {editingOrder === order.id ? (
-                                    <div className="flex gap-1 flex-wrap items-center justify-end">
-                                      <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Name" className={`${inputClass} h-6 text-xs w-24`} data-testid={`input-edit-name-${order.id}`} />
-                                      <Input value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="Phone" className={`${inputClass} h-6 text-xs w-24`} data-testid={`input-edit-phone-${order.id}`} />
-                                      <Input value={editAddress} onChange={e => setEditAddress(e.target.value)} placeholder="Address" className={`${inputClass} h-6 text-xs w-28`} data-testid={`input-edit-address-${order.id}`} />
-                                      <Input value={editCity} onChange={e => setEditCity(e.target.value)} placeholder="City" className={`${inputClass} h-6 text-xs w-20`} data-testid={`input-edit-city-${order.id}`} />
-                                      <Button size="sm" className="h-6 text-xs px-2 bg-blue-600 hover:bg-blue-500 text-white"
-                                        onClick={() => customerUpdateMutation.mutate({ orderId: order.id, data: { customerName: editName, customerPhone: editPhone, shippingAddress: editAddress, city: editCity } })}
-                                        disabled={customerUpdateMutation.isPending}
-                                        data-testid={`button-save-customer-${order.id}`}>Save</Button>
-                                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2 text-white/40" onClick={() => setEditingOrder(null)} data-testid={`button-cancel-edit-${order.id}`}>Cancel</Button>
+                                  {order.orderSource === "shopify_draft_order" && (
+                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order">
+                                      <PenLine className="w-2.5 h-2.5 text-green-700 dark:text-green-300" />
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {order.orderDate ? formatPkDateTime(order.orderDate) : ""}
+                                </div>
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {editingOrder === order.id ? (
+                                  <div className="space-y-1">
+                                    <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Name" className="h-7 text-xs" data-testid={`input-search-edit-name-${order.id}`} />
+                                    <Input value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="Phone" className="h-7 text-xs" data-testid={`input-search-edit-phone-${order.id}`} />
+                                    <Input value={editAddress} onChange={e => setEditAddress(e.target.value)} placeholder="Address" className="h-7 text-xs" data-testid={`input-search-edit-address-${order.id}`} />
+                                    <Input value={editCity} onChange={e => setEditCity(e.target.value)} placeholder="City" className="h-7 text-xs" data-testid={`input-search-edit-city-${order.id}`} />
+                                    <div className="flex gap-1">
+                                      <Button size="sm" className="h-6 text-xs px-2" onClick={() => {
+                                        customerUpdateMutation.mutate({
+                                          orderId: order.id,
+                                          data: { customerName: editName, customerPhone: editPhone, shippingAddress: editAddress, city: editCity }
+                                        });
+                                      }} data-testid={`button-search-save-edit-${order.id}`}>Save</Button>
+                                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setEditingOrder(null)}>Cancel</Button>
                                     </div>
-                                  ) : renderActionButtons(order, stage)}
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <div className="font-medium text-sm truncate max-w-[120px]" title={order.customerName || ""}>{order.customerName && order.customerName.length > 15 ? order.customerName.slice(0, 13) + ".." : order.customerName}</div>
+                                    <div className="text-xs text-muted-foreground">{order.customerPhone || "No phone"}</div>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-1.5 hidden md:table-cell text-sm truncate max-w-[100px]" title={order.city || ""}>{order.city && order.city.length > 15 ? order.city.slice(0, 13) + ".." : (order.city || "-")}</td>
+                              {hasAddressProducts(stage) && (
+                                <>
+                                  <td className="px-3 py-1.5 max-w-[220px]">
+                                    <div className="text-xs text-muted-foreground whitespace-normal leading-tight">{order.shippingAddress || "-"}</div>
+                                  </td>
+                                  <td className="px-3 py-1.5 max-w-[180px]">
+                                    <div className="text-xs text-muted-foreground leading-tight">
+                                      {order.itemSummary ? order.itemSummary.split(' || ').map((item, i) => (
+                                        <div key={i} className="truncate">{item}</div>
+                                      )) : "-"}
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                              <td className="px-3 py-1.5">
+                                <div className="font-medium text-sm">{Number(order.totalAmount).toLocaleString()}</div>
+                                {order.codPaymentStatus === "PAID" ? (
+                                  <Badge className="text-xs bg-green-500/10 text-green-600 border-green-500/20">Prepaid</Badge>
+                                ) : order.codPaymentStatus === "PARTIALLY_PAID" ? (
+                                  <span className="text-xs text-amber-600">COD: {Number(order.codRemaining ?? order.totalAmount).toLocaleString()}</span>
+                                ) : (
+                                  <div className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</div>
+                                )}
+                              </td>
+                              <td className="px-3 py-1.5 hidden lg:table-cell text-center w-[40px]">
+                                <span className="text-sm font-medium">{order.totalQuantity || 1}</span>
+                              </td>
+                              <td className="px-3 py-1.5 hidden md:table-cell max-w-[100px]">
+                                <div className="flex flex-wrap gap-0.5">
+                                  {getRoboTags(order.tags as string[], tagConfig).map(tag => (
+                                    <Badge key={tag} className={`text-[10px] px-1.5 py-0 leading-4 ${getRoboTagStyle(tag, tagConfig) || ''}`}>
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </td>
+                              {stage === "PENDING" && (
+                                <td className="px-3 py-1.5">
+                                  <Badge variant="secondary" className="text-xs">
+                                    {order.pendingReasonType || "Unknown"}
+                                  </Badge>
                                 </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                              )}
+                              {stage === "HOLD" && (
+                                <td className="px-3 py-1.5">
+                                  {order.holdUntil ? (
+                                    <div className="text-xs">{formatPkDateTime(order.holdUntil)}</div>
+                                  ) : "-"}
+                                </td>
+                              )}
+                              {hasShipmentColumns(stage) && (
+                                <>
+                                  <td className="px-3 py-1.5">
+                                    <div className="text-xs font-medium">{order.courierName || "-"}</div>
+                                    <div className="text-xs text-muted-foreground">{order.courierTracking || "-"}</div>
+                                  </td>
+                                  <td className="px-3 py-1.5">
+                                    <Badge className={`text-xs ${getStatusBadgeColor(order.workflowStatus)}`}
+                                      title={order.shipmentStatus || undefined}
+                                      data-testid={`badge-search-status-${order.id}`}>
+                                      {truncateStatus(order.shipmentStatus || "Unknown")}
+                                    </Badge>
+                                  </td>
+                                </>
+                              )}
+                              {stage === "CANCELLED" && (
+                                <td className="px-3 py-1.5">
+                                  <div className="text-xs text-muted-foreground">{order.cancelReason || "No reason given"}</div>
+                                  {order.cancelledAt && (
+                                    <div className="text-xs text-muted-foreground/70">{formatPkDateTime(order.cancelledAt)}</div>
+                                  )}
+                                </td>
+                              )}
+                              <td className="px-3 py-1.5 max-w-[150px]">
+                                <button
+                                  className="text-left w-full cursor-pointer hover:opacity-80"
+                                  onClick={() => openRemarkDialog(order)}
+                                  data-testid={`button-search-remark-${order.id}`}
+                                >
+                                  {order.remark ? (
+                                    <span className="text-xs text-muted-foreground truncate block max-w-[140px]" title={order.remark}>
+                                      {order.remark.length > 30 ? order.remark.slice(0, 28) + "..." : order.remark}
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground/50 italic">Add...</span>
+                                  )}
+                                </button>
+                              </td>
+                              <td className="px-3 py-1.5 text-right">
+                                {renderActionButtons(order, stage)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   );
                 })}
+                {(data?.total || 0) > results.length && (
+                  <div className="px-4 py-2 text-xs text-muted-foreground text-center border-t">
+                    Showing {results.length} of {data?.total} results
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
-      </div>
-
-      {/* Remark dialog */}
-      <Dialog open={remarkDialogOpen} onOpenChange={setRemarkDialogOpen}>
-        <DialogContent className="bg-[#0d1322] border-white/10 text-white">
-          <DialogHeader>
-            <DialogTitle className="text-white">Update Remark</DialogTitle>
-            <DialogDescription className="text-white/40">Order #{selectedRemarkOrder?.orderNumber}</DialogDescription>
-          </DialogHeader>
-          <Textarea value={remarkValue} onChange={e => setRemarkValue(e.target.value)} placeholder="Enter remark..." className="bg-white/5 border-white/10 text-white placeholder:text-white/30" rows={3} data-testid="textarea-remark" />
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" className="text-white/40" onClick={() => setRemarkDialogOpen(false)} data-testid="button-cancel-remark">Cancel</Button>
-            <Button className="bg-blue-600 hover:bg-blue-500 text-white" onClick={() => selectedRemarkOrder && updateRemarkMutation.mutate({ orderId: selectedRemarkOrder.id, value: remarkValue })} disabled={updateRemarkMutation.isPending} data-testid="button-save-remark">
-              {updateRemarkMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Cancel confirm dialog */}
-      <AlertDialog open={cancelConfirm?.open ?? false} onOpenChange={open => !open && setCancelConfirm(null)}>
-        <AlertDialogContent className="bg-[#0d1322] border-white/10 text-white">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">Confirm Cancellation</AlertDialogTitle>
-            <AlertDialogDescription className="text-white/40">
-              {cancelConfirm?.type === "courier"
-                ? `Cancel courier AWB for order #${cancelConfirm?.orderNumber}? This will move the order back to Ready to Ship.`
-                : `Cancel order #${cancelConfirm?.orderNumber} on Shopify? This cannot be undone.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="bg-white/5 border-white/10 text-white hover:bg-white/10" data-testid="button-cancel-confirm-keep">Keep</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-500 text-white" data-testid="button-cancel-confirm-action"
-              onClick={() => {
-                if (!cancelConfirm) return;
-                if (cancelConfirm.type === "courier") cancelBookingMutation.mutate(cancelConfirm.orderId);
-                else cancelShopifyMutation.mutate(cancelConfirm.orderId);
-              }}>
-              {(cancelBookingMutation.isPending || cancelShopifyMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Confirm Cancel
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </CardContent>
+    </Card>
+    <Dialog open={remarkDialogOpen} onOpenChange={setRemarkDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Remark - {String(selectedRemarkOrder?.orderNumber || '').replace(/^#/, '')}</DialogTitle>
+          <DialogDescription>Add or update the remark for this order.</DialogDescription>
+        </DialogHeader>
+        <Textarea
+          value={remarkValue}
+          onChange={(e) => setRemarkValue(e.target.value)}
+          placeholder="Enter remark..."
+          rows={4}
+          data-testid="textarea-search-remark"
+        />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setRemarkDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              if (selectedRemarkOrder) {
+                updateRemarkMutation.mutate({ orderId: selectedRemarkOrder.id, value: remarkValue });
+              }
+            }}
+            disabled={updateRemarkMutation.isPending}
+            data-testid="button-search-save-remark"
+          >
+            {updateRemarkMutation.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+            Save
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    <AlertDialog open={!!cancelConfirm?.open} onOpenChange={(open) => !open && setCancelConfirm(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {cancelConfirm?.type === "courier" ? "Cancel Courier Booking?" : "Cancel Shopify Order?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {cancelConfirm?.type === "courier" ? (
+              <>This will cancel the AWB/tracking number with the courier and move order <span className="font-medium">{String(cancelConfirm?.orderNumber || '').replace(/^#/, '')}</span> back to Ready to Ship.</>
+            ) : (
+              <>This will cancel order <span className="font-medium">{String(cancelConfirm?.orderNumber || '').replace(/^#/, '')}</span> on Shopify. This action cannot be easily undone.</>
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="button-search-cancel-confirm-dismiss">Go Back</AlertDialogCancel>
+          <AlertDialogAction
+            data-testid="button-search-cancel-confirm-proceed"
+            className="bg-destructive text-destructive-foreground"
+            disabled={cancelBookingMutation.isPending || cancelShopifyMutation.isPending}
+            onClick={() => {
+              if (!cancelConfirm) return;
+              if (cancelConfirm.type === "courier") {
+                cancelBookingMutation.mutate(cancelConfirm.orderId);
+              } else {
+                cancelShopifyMutation.mutate(cancelConfirm.orderId);
+              }
+            }}
+          >
+            {(cancelBookingMutation.isPending || cancelShopifyMutation.isPending) && (
+              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+            )}
+            {cancelConfirm?.type === "courier" ? "Cancel AWB" : "Cancel on Shopify"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     </>
   );
 }
 
-/* ── Main Dashboard ──────────────────────────────────────────────────────── */
 export default function Dashboard() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const { dateRange } = useDateRange();
+  const { dateParams } = useDateRange();
 
-  const statsParams = new URLSearchParams();
-  if (dateRange?.from) statsParams.set("dateFrom", dateRange.from.toISOString().slice(0, 10));
-  if (dateRange?.to) statsParams.set("dateTo", dateRange.to.toISOString().slice(0, 10));
-  const statsUrl = `/api/dashboard/stats${statsParams.toString() ? `?${statsParams}` : ""}`;
+  const statsQueryParams = new URLSearchParams();
+  if (dateParams.dateFrom) statsQueryParams.set("dateFrom", dateParams.dateFrom);
+  if (dateParams.dateTo) statsQueryParams.set("dateTo", dateParams.dateTo);
+  const statsQueryString = statsQueryParams.toString();
+  const statsUrl = `/api/dashboard/stats${statsQueryString ? `?${statsQueryString}` : ""}`;
 
-  const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
-    queryKey: ["/api/dashboard/stats", dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
-    queryFn: () => fetch(statsUrl, { credentials: "include" }).then(r => r.json()),
+  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<DashboardStats>({
+    queryKey: [statsUrl],
+    refetchInterval: 30000,
   });
 
-  const countsParams = new URLSearchParams();
-  if (dateRange?.from) countsParams.set("dateFrom", dateRange.from.toISOString().slice(0, 10));
-  if (dateRange?.to) countsParams.set("dateTo", dateRange.to.toISOString().slice(0, 10));
-  const countsUrl = `/api/orders/workflow-counts${countsParams.toString() ? `?${countsParams}` : ""}`;
-
-  const { data: workflowCounts, isLoading: countsLoading } = useQuery<Record<string, number>>({
-    queryKey: ["/api/orders/workflow-counts", dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
-    queryFn: () => fetch(countsUrl, { credentials: "include" }).then(r => r.json()),
+  const workflowCountsUrl = `/api/orders/workflow-counts${statsQueryString ? `?${statsQueryString}` : ""}`;
+  const { data: workflowData, isLoading: countsLoading } = useQuery<Record<string, any>>({
+    queryKey: [workflowCountsUrl],
+    refetchInterval: 30000,
   });
+  const workflowCounts = workflowData ? Object.fromEntries(Object.entries(workflowData).filter(([k]) => k !== "totalAmounts").map(([k, v]) => [k, Number(v) || 0])) as Record<string, number> : undefined;
+  const workflowAmounts = (workflowData?.totalAmounts ?? {}) as Record<string, number>;
 
   const { data: recentOrders, isLoading: ordersLoading } = useQuery<RecentOrder[]>({
     queryKey: ["/api/orders/recent"],
+    refetchInterval: 30000,
   });
 
-  const handleRefresh = async () => {
-    await queryClient.invalidateQueries({ predicate: q => String(q.queryKey[0]).startsWith("/api/dashboard") || String(q.queryKey[0]).startsWith("/api/orders") });
-    toast({ title: "Dashboard refreshed" });
+  const handleRefresh = () => {
+    refetchStats();
   };
 
-  /* ── Derived metrics ── */
-  const total = Object.values(workflowCounts ?? {}).reduce((s, v) => s + (v || 0), 0);
-  const dispatched = (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
-  const delivered = workflowCounts?.DELIVERED ?? 0;
-  const returned = workflowCounts?.RETURN ?? 0;
-  const cancelled = workflowCounts?.CANCELLED ?? 0;
-  const fulfilled = workflowCounts?.FULFILLED ?? 0;
-
-  const fulfillmentRatio   = total      > 0 ? Math.round((dispatched / total) * 100)      : 0;
-  const deliveryRatio      = dispatched > 0 ? Math.round((delivered  / dispatched) * 100)  : 0;
-  const returnRatio        = dispatched > 0 ? Math.round((returned   / dispatched) * 100)  : 0;
-  const cancellationRatio  = total      > 0 ? Math.round((cancelled  / total) * 100)       : 0;
-  const pendingRatio       = dispatched > 0 ? Math.round((fulfilled  / dispatched) * 100)  : 0;
-
-  /* ── Pipeline chart data (derived from existing workflowCounts) ── */
-  const chartData = [
-    { name: "New",     orders: workflowCounts?.NEW          ?? 0 },
-    { name: "Pending", orders: workflowCounts?.PENDING      ?? 0 },
-    { name: "Booked",  orders: workflowCounts?.BOOKED       ?? 0 },
-    { name: "Ship",    orders: workflowCounts?.READY_TO_SHIP ?? 0 },
-    { name: "Transit", orders: workflowCounts?.FULFILLED    ?? 0 },
-    { name: "Deliver", orders: workflowCounts?.DELIVERED    ?? 0 },
-    { name: "Return",  orders: workflowCounts?.RETURN       ?? 0 },
-  ];
-
   return (
-    <div className="relative min-h-full space-y-6" style={{ background: BG, margin: "-24px", padding: "24px" }}>
-
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: TEXT }}>Dashboard</h1>
-          <p className="text-sm mt-0.5" style={{ color: TEXT_MUTED }}>Your logistics overview</p>
+          <h1 className="text-xl font-semibold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Your logistics overview</p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleRefresh}
-          className="text-white/40 hover:text-white/80 hover:bg-white/5 border border-white/8"
-          data-testid="button-refresh-dashboard"
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button onClick={handleRefresh} variant="outline" size="sm" data-testid="button-refresh-dashboard">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
-      {/* ── AI banner ── */}
       <AIInsightsBanner section="dashboard" />
 
-      {/* ── KPI cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-testid="section-order-overview">
-        <KpiCard
-          title="Total Orders"
-          value={statsLoading ? "—" : (stats?.totalOrders ?? 0).toLocaleString()}
-          icon={ShoppingCart}
-          trend={stats?.ordersTrend}
-          trendLabel="vs last week"
-          subtitle={`PKR ${stats?.codPending ?? "0"} COD pending`}
-          accentColor="#3b82f6"
-          isLoading={statsLoading}
-        />
-        <KpiCard
-          title="Dispatched"
-          value={countsLoading ? "—" : dispatched.toLocaleString()}
-          icon={Truck}
-          subtitle={`${workflowCounts?.BOOKED ?? 0} booked · ${workflowCounts?.FULFILLED ?? 0} in transit`}
-          accentColor="#8b5cf6"
-          isLoading={countsLoading}
-        />
-        <KpiCard
-          title="Delivered"
-          value={countsLoading ? "—" : delivered.toLocaleString()}
-          icon={CheckCircle2}
-          trend={stats?.deliveryRate}
-          trendLabel="delivery rate"
-          subtitle={`${stats?.deliveredToday ?? 0} today`}
-          accentColor="#10b981"
-          isLoading={countsLoading}
-        />
-        <KpiCard
-          title="Cancelled"
-          value={countsLoading ? "—" : cancelled.toLocaleString()}
-          icon={XCircle}
-          subtitle={`${returned} returned · ${cancellationRatio}% cancel rate`}
-          accentColor="#f43f5e"
-          isLoading={countsLoading}
-        />
-      </div>
+      {/* Search */}
+      <OrderSearchSection />
 
-      {/* ── Two-column grid: chart left, metrics right ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      {/* Section 1: Order Overview */}
+      {(() => {
+        const total = Object.values(workflowCounts ?? {}).reduce((sum, v) => sum + (v || 0), 0);
+        const dispatched = (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
+        const pending = (workflowCounts?.NEW ?? 0) + (workflowCounts?.PENDING ?? 0) + (workflowCounts?.HOLD ?? 0) + (workflowCounts?.READY_TO_SHIP ?? 0) + (workflowCounts?.BOOKED ?? 0);
+        const delivered = workflowCounts?.DELIVERED ?? 0;
+        const cancelled = workflowCounts?.CANCELLED ?? 0;
 
-        {/* Chart (left, wider) — order pipeline distribution */}
-        <div style={darkCard} className="xl:col-span-2 p-5" data-testid="section-order-pipeline-chart">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-semibold" style={{ color: TEXT }}>Order Pipeline</h3>
-              <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>Current distribution by stage</p>
+        const fmtCod = (amount: number) => `COD: PKR ${Math.round(amount).toLocaleString()}`;
+        const totalCod = Object.values(workflowAmounts).reduce((sum, v) => sum + (v || 0), 0);
+        const dispatchedCod = (workflowAmounts.FULFILLED ?? 0) + (workflowAmounts.DELIVERED ?? 0) + (workflowAmounts.RETURN ?? 0);
+        const deliveredCod = workflowAmounts.DELIVERED ?? 0;
+        const pendingCod = (workflowAmounts.NEW ?? 0) + (workflowAmounts.PENDING ?? 0) + (workflowAmounts.HOLD ?? 0) + (workflowAmounts.READY_TO_SHIP ?? 0) + (workflowAmounts.BOOKED ?? 0);
+        const cancelledCod = workflowAmounts.CANCELLED ?? 0;
+
+        return (
+          <div className="space-y-3">
+            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-order-overview">Order Overview</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              <StatCard
+                title="Total Orders"
+                value={countsLoading ? "—" : total.toLocaleString()}
+                icon={Package}
+                trend={stats?.ordersTrend}
+                trendLabel="vs last week"
+                subtitle={countsLoading ? undefined : fmtCod(totalCod)}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Dispatched"
+                value={countsLoading ? "—" : dispatched.toLocaleString()}
+                icon={Send}
+                iconColor="text-muted-foreground"
+                subtitle={countsLoading ? undefined : fmtCod(dispatchedCod)}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Delivered"
+                value={countsLoading ? "—" : delivered.toLocaleString()}
+                icon={CheckCircle2}
+                iconColor="text-muted-foreground"
+                subtitle={countsLoading ? undefined : fmtCod(deliveredCod)}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Pending"
+                value={countsLoading ? "—" : pending.toLocaleString()}
+                icon={Clock}
+                iconColor="text-muted-foreground"
+                subtitle={countsLoading ? undefined : fmtCod(pendingCod)}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Cancelled"
+                value={countsLoading ? "—" : cancelled.toLocaleString()}
+                icon={Ban}
+                iconColor="text-muted-foreground"
+                subtitle={countsLoading ? undefined : fmtCod(cancelledCod)}
+                isLoading={countsLoading}
+              />
             </div>
-            <BarChart3 className="w-4 h-4" style={{ color: TEXT_MUTED }} />
           </div>
+        );
+      })()}
+
+      {/* Section 2: Performance Metrics */}
+      {(() => {
+        const total = Object.values(workflowCounts ?? {}).reduce((sum, v) => sum + (v || 0), 0);
+        const dispatched = (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
+        const delivered = workflowCounts?.DELIVERED ?? 0;
+        const returned = workflowCounts?.RETURN ?? 0;
+        const cancelled = workflowCounts?.CANCELLED ?? 0;
+        const fulfilled = workflowCounts?.FULFILLED ?? 0;
+
+        const fulfillmentRatio = total > 0 ? Math.round((dispatched / total) * 100) : 0;
+        const deliveryRatio = dispatched > 0 ? Math.round((delivered / dispatched) * 100) : 0;
+        const returnRatio = dispatched > 0 ? Math.round((returned / dispatched) * 100) : 0;
+        const cancellationRatio = total > 0 ? Math.round((cancelled / total) * 100) : 0;
+        const pendingRatio = dispatched > 0 ? Math.round((fulfilled / dispatched) * 100) : 0;
+
+        return (
+          <div className="space-y-3">
+            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-performance-metrics">Performance Metrics</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              <StatCard
+                title="Fulfillment Ratio"
+                value={countsLoading ? "—" : `${fulfillmentRatio}%`}
+                icon={BarChart3}
+                iconColor="text-muted-foreground"
+                subtitle={`${dispatched} dispatched / ${total} total`}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Cancellation Ratio"
+                value={countsLoading ? "—" : `${cancellationRatio}%`}
+                icon={X}
+                iconColor="text-muted-foreground"
+                subtitle={`${cancelled} cancelled / ${total} total`}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Delivery Ratio"
+                value={countsLoading ? "—" : `${deliveryRatio}%`}
+                icon={Target}
+                iconColor="text-muted-foreground"
+                subtitle={`${delivered} delivered / ${dispatched} dispatched`}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Pending Ratio"
+                value={countsLoading ? "—" : `${pendingRatio}%`}
+                icon={Clock}
+                iconColor="text-muted-foreground"
+                subtitle={`${fulfilled} fulfilled / ${dispatched} dispatched`}
+                isLoading={countsLoading}
+              />
+              <StatCard
+                title="Return Ratio"
+                value={countsLoading ? "—" : `${returnRatio}%`}
+                icon={RotateCcw}
+                iconColor="text-muted-foreground"
+                subtitle={`${returned} returned / ${dispatched} dispatched`}
+                isLoading={countsLoading}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Status Breakdown */}
+      <Card>
+        <CardContent className="p-3">
           {countsLoading ? (
-            <Skeleton className="h-40 w-full bg-white/5 rounded-xl" />
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="blueGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="name" tick={{ fill: TEXT_MUTED, fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: TEXT_MUTED, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip content={<DarkTooltip />} />
-                <Area type="monotone" dataKey="orders" name="Orders" stroke="#60a5fa" strokeWidth={2} fill="url(#blueGrad)" dot={{ fill: "#60a5fa", r: 3, strokeWidth: 0 }} activeDot={{ r: 5, fill: "#3b82f6" }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* Right panel: metrics + COD */}
-        <div className="flex flex-col gap-4">
-
-          {/* Performance metrics */}
-          <div style={darkCard} className="p-5 flex-1">
-            <div className="flex items-center gap-2 mb-4">
-              <Target className="w-4 h-4" style={{ color: "#60a5fa" }} />
-              <h3 className="text-sm font-semibold" style={{ color: TEXT }} data-testid="section-performance-metrics">Performance</h3>
+            <div className="flex gap-2 flex-wrap">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-6 w-20 rounded-md" />
+              ))}
             </div>
-            {countsLoading ? (
-              <div className="space-y-3">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-8 w-full bg-white/5" />)}</div>
-            ) : (
-              <div className="space-y-4">
-                <MetricBar label="Fulfillment" value={fulfillmentRatio} subtitle={`${dispatched} / ${total} dispatched`} color="#3b82f6" />
-                <MetricBar label="Delivery Rate" value={deliveryRatio} subtitle={`${delivered} / ${dispatched} delivered`} color="#10b981" />
-                <MetricBar label="In Transit" value={pendingRatio} subtitle={`${fulfilled} / ${dispatched} en-route`} color="#8b5cf6" />
-                <MetricBar label="Returns" value={returnRatio} subtitle={`${returned} / ${dispatched} returned`} color="#f59e0b" />
-                <MetricBar label="Cancellations" value={cancellationRatio} subtitle={`${cancelled} / ${total} cancelled`} color="#f43f5e" />
-              </div>
-            )}
-          </div>
-
-          {/* COD pending */}
-          <div style={{ ...darkCard, borderLeft: "3px solid #10b981" }} className="p-5">
-            <div className="flex items-center gap-2 mb-2">
-              <Banknote className="w-4 h-4" style={{ color: "#10b981" }} />
-              <p className="text-xs font-medium uppercase tracking-wider" style={{ color: TEXT_MUTED }}>COD Pending</p>
-            </div>
-            {statsLoading
-              ? <Skeleton className="h-8 w-32 bg-white/5" />
-              : <p className="text-2xl font-bold" style={{ color: TEXT }}>PKR {stats?.codPending ?? "0"}</p>}
-            <Link href="/cod">
-              <Button variant="ghost" size="sm" className="mt-3 h-7 px-0 text-xs hover:bg-transparent" style={{ color: "#10b981" }} data-testid="button-view-cod">
-                View Details <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Status breakdown chips ── */}
-      <div style={darkCard} className="p-4">
-        {countsLoading ? (
-          <div className="flex gap-2 flex-wrap">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-6 w-20 rounded-full bg-white/5" />)}</div>
-        ) : workflowCounts ? (
-          <div className="flex gap-2 flex-wrap" data-testid="status-breakdown-chips">
-            {[
-              { key: "NEW", label: "New" }, { key: "PENDING", label: "Pending" }, { key: "HOLD", label: "Hold" },
-              { key: "READY_TO_SHIP", label: "Ready to Ship" }, { key: "BOOKED", label: "Booked" }, { key: "FULFILLED", label: "Fulfilled" },
-              { key: "DELIVERED", label: "Delivered" }, { key: "RETURN", label: "Return" }, { key: "CANCELLED", label: "Cancelled" },
-            ]
-              .filter(s => (workflowCounts[s.key] || 0) > 0)
-              .map(s => {
-                const c = WORKFLOW_CHIP_COLORS[s.key] || WORKFLOW_CHIP_COLORS.NEW;
-                return (
+          ) : workflowCounts ? (
+            <div className="flex gap-1.5 flex-wrap" data-testid="status-breakdown-chips">
+              {[
+                { key: 'NEW', label: 'New' },
+                { key: 'PENDING', label: 'Pending' },
+                { key: 'HOLD', label: 'Hold' },
+                { key: 'READY_TO_SHIP', label: 'Ready to Ship' },
+                { key: 'BOOKED', label: 'Booked' },
+                { key: 'FULFILLED', label: 'Fulfilled' },
+                { key: 'DELIVERED', label: 'Delivered' },
+                { key: 'RETURN', label: 'Return' },
+                { key: 'CANCELLED', label: 'Cancelled' },
+              ]
+                .filter(s => (workflowCounts[s.key] || 0) > 0)
+                .map(s => (
                   <Link key={s.key} href={`/orders?workflowStatus=${s.key}`}>
-                    <span
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full cursor-pointer transition-all hover:brightness-125"
-                      style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
+                    <Badge
+                      variant="secondary"
+                      className="cursor-pointer text-xs"
                       data-testid={`chip-dashboard-${s.key}`}
                     >
                       {s.label}
-                      <span className="font-bold">{(workflowCounts[s.key] || 0).toLocaleString()}</span>
-                    </span>
+                      <span className="font-semibold ml-1">{(workflowCounts[s.key] || 0).toLocaleString()}</span>
+                    </Badge>
                   </Link>
-                );
-              })}
-          </div>
-        ) : null}
-      </div>
+                ))}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
-      {/* ── Order search ── */}
-      <OrderSearchSection />
-
-      {/* ── Recent orders ── */}
-      <div style={darkCard} className="overflow-hidden">
-        <div className="flex items-center justify-between gap-4 px-5 py-4" style={{ borderBottom: `1px solid ${BORDER}` }}>
-          <div className="flex items-center gap-2">
-            <Package className="w-4 h-4" style={{ color: "#60a5fa" }} />
-            <h3 className="text-sm font-semibold" style={{ color: TEXT }}>Recent Orders</h3>
+      {/* COD Pending Card */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">COD Pending Collection</p>
+              <p className="text-2xl font-semibold mt-1">PKR {stats?.codPending ?? "0"}</p>
+            </div>
+            <Link href="/cod">
+              <Button variant="outline" size="sm" data-testid="button-view-cod">
+                View Details
+                <ArrowUpRight className="w-3.5 h-3.5 ml-1.5" />
+              </Button>
+            </Link>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Orders */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
+          <CardTitle className="text-sm font-medium">Recent Orders</CardTitle>
           <Link href="/orders">
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs hover:bg-white/5" style={{ color: TEXT_MUTED }} data-testid="button-view-all-orders">
-              View All <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+            <Button variant="ghost" size="sm" data-testid="button-view-all-orders">
+              View All
+              <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
             </Button>
           </Link>
-        </div>
-        {ordersLoading ? (
-          <div className="divide-y divide-white/5">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex items-center justify-between px-5 py-3.5">
-                <Skeleton className="h-4 w-32 bg-white/5" />
-                <Skeleton className="h-5 w-20 bg-white/5" />
-              </div>
-            ))}
-          </div>
-        ) : recentOrders && recentOrders.length > 0 ? (
-          <div>
-            {recentOrders.map((order, i) => (
-              <Link key={order.id} href={`/orders/detail/${order.id}`}>
-                <div
-                  className="flex items-center justify-between px-5 py-3.5 cursor-pointer transition-colors"
-                  style={{ borderTop: i > 0 ? `1px solid ${BORDER}` : "none" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(59,130,246,0.05)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                  data-testid={`order-row-${order.id}`}
-                >
-                  <div>
-                    <p className="font-semibold text-sm font-mono" style={{ color: "#60a5fa" }}>
-                      #{String(order.orderNumber || '').replace(/^#/, '')}
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>
-                      {order.customerName} · {order.city}
-                    </p>
-                  </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {ordersLoading ? (
+            <div className="divide-y">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center justify-between px-4 py-3">
                   <div className="flex items-center gap-3">
-                    <div className="text-right hidden sm:block">
-                      <p className="text-sm font-semibold" style={{ color: TEXT_DIM }}>PKR {order.totalAmount}</p>
-                      <p className="text-xs capitalize" style={{ color: TEXT_MUTED }}>{order.paymentMethod}</p>
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-3 w-28" />
                     </div>
-                    {getStatusBadge(order.shipmentStatus || "Unfulfilled", order.workflowStatus)}
                   </div>
+                  <Skeleton className="h-5 w-16" />
                 </div>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12 px-4">
-            <Package className="w-10 h-10 mx-auto mb-3" style={{ color: "rgba(255,255,255,0.15)" }} />
-            <p className="text-sm font-medium" style={{ color: TEXT_DIM }}>No orders yet</p>
-            <p className="text-xs mt-1" style={{ color: TEXT_MUTED }}>Orders from your Shopify store will appear here</p>
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          ) : recentOrders && recentOrders.length > 0 ? (
+            <div className="divide-y">
+              {recentOrders.map((order) => (
+                <Link key={order.id} href={`/orders/detail/${order.id}`}>
+                  <div className="flex items-center justify-between px-4 py-3 hover-elevate cursor-pointer" data-testid={`order-row-${order.id}`}>
+                    <div>
+                      <p className="font-medium text-sm">{String(order.orderNumber || '').replace(/^#/, '')}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {order.customerName} • {order.city}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right hidden sm:block">
+                        <p className="text-sm font-medium">PKR {order.totalAmount}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</p>
+                      </div>
+                      {getStatusBadge(order.shipmentStatus || "Unfulfilled", order.workflowStatus)}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-10 px-4">
+              <Package className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-sm font-medium mb-0.5">No orders yet</p>
+              <p className="text-xs text-muted-foreground">
+                Orders from your Shopify store will appear here
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
