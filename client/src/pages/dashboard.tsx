@@ -42,6 +42,7 @@ import {
   Undo2,
   Banknote,
   ShoppingCart,
+  MessageSquare,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -198,7 +199,7 @@ function KpiCard({
     );
   }
   return (
-    <div style={{ ...darkCard, padding: "20px", borderLeft: `3px solid ${accent}` }}>
+    <div style={{ ...darkCard, border: "none", borderTop: `1px solid ${BORDER}`, borderRight: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, borderLeft: `3px solid ${accent}`, padding: "20px" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1 min-w-0 flex-1">
           <p className="text-xs font-medium uppercase tracking-wider" style={{ color: TEXT_MUTED }}>{title}</p>
@@ -487,6 +488,11 @@ function OrderSearchSection() {
           <XCircle className="w-3.5 h-3.5 mr-1" />Cancel on Shopify
         </Button>
       )}
+      <Button size="icon" variant="ghost" className="h-7 w-7 text-yellow-400/70 hover:text-yellow-300"
+        onClick={() => openRemarkDialog(order)} title="Remark"
+        data-testid={`button-search-remark-${order.id}`}>
+        <MessageSquare className="w-4 h-4" />
+      </Button>
       {stage !== "NEW" && stage !== "BOOKED" && stage !== "FULFILLED" && stage !== "DELIVERED" && stage !== "RETURN" && order.previousWorkflowStatus && (
         <Button size="icon" variant="ghost" className="h-7 w-7 text-white/30 hover:text-white/60"
           onClick={() => workflowMutation.mutate({ orderId: order.id, action: "revert" })} disabled={isPending} title="Revert"
@@ -608,9 +614,10 @@ function OrderSearchSection() {
                                 <td className="px-3 py-2.5">
                                   {editingOrder === order.id ? (
                                     <div className="flex gap-1 flex-wrap items-center justify-end">
-                                      <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Name" className={`${inputClass} h-6 text-xs w-24`} />
-                                      <Input value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="Phone" className={`${inputClass} h-6 text-xs w-24`} />
-                                      <Input value={editCity} onChange={e => setEditCity(e.target.value)} placeholder="City" className={`${inputClass} h-6 text-xs w-20`} />
+                                      <Input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Name" className={`${inputClass} h-6 text-xs w-24`} data-testid={`input-edit-name-${order.id}`} />
+                                      <Input value={editPhone} onChange={e => setEditPhone(e.target.value)} placeholder="Phone" className={`${inputClass} h-6 text-xs w-24`} data-testid={`input-edit-phone-${order.id}`} />
+                                      <Input value={editAddress} onChange={e => setEditAddress(e.target.value)} placeholder="Address" className={`${inputClass} h-6 text-xs w-28`} data-testid={`input-edit-address-${order.id}`} />
+                                      <Input value={editCity} onChange={e => setEditCity(e.target.value)} placeholder="City" className={`${inputClass} h-6 text-xs w-20`} data-testid={`input-edit-city-${order.id}`} />
                                       <Button size="sm" className="h-6 text-xs px-2 bg-blue-600 hover:bg-blue-500 text-white"
                                         onClick={() => customerUpdateMutation.mutate({ orderId: order.id, data: { customerName: editName, customerPhone: editPhone, shippingAddress: editAddress, city: editCity } })}
                                         disabled={customerUpdateMutation.isPending}
@@ -701,8 +708,14 @@ export default function Dashboard() {
     queryFn: () => fetch(statsUrl, { credentials: "include" }).then(r => r.json()),
   });
 
+  const countsParams = new URLSearchParams();
+  if (dateRange?.from) countsParams.set("dateFrom", dateRange.from.toISOString().slice(0, 10));
+  if (dateRange?.to) countsParams.set("dateTo", dateRange.to.toISOString().slice(0, 10));
+  const countsUrl = `/api/orders/workflow-counts${countsParams.toString() ? `?${countsParams}` : ""}`;
+
   const { data: workflowCounts, isLoading: countsLoading } = useQuery<Record<string, number>>({
-    queryKey: ["/api/orders/workflow-counts"],
+    queryKey: ["/api/orders/workflow-counts", dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
+    queryFn: () => fetch(countsUrl, { credentials: "include" }).then(r => r.json()),
   });
 
   const { data: recentOrders, isLoading: ordersLoading } = useQuery<RecentOrder[]>({
@@ -714,10 +727,7 @@ export default function Dashboard() {
   });
 
   const handleRefresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-    await queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
-    await queryClient.invalidateQueries({ queryKey: ["/api/orders/recent"] });
-    await queryClient.invalidateQueries({ queryKey: ["/api/dashboard/trend"] });
+    await queryClient.invalidateQueries({ predicate: q => String(q.queryKey[0]).startsWith("/api/dashboard") || String(q.queryKey[0]).startsWith("/api/orders") });
     toast({ title: "Dashboard refreshed" });
   };
 
