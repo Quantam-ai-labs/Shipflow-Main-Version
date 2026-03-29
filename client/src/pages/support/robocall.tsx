@@ -64,10 +64,10 @@ const CALL_STATUS_MAP: Record<number, { label: string; color: string }> = {
   5: { label: "Busy", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" },
   6: { label: "Hangup", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
   7: { label: "Limit Exceeded", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
-  8: { label: "Sent to SIP", color: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
+  8: { label: "Sent to SIP", color: "bg-muted text-muted-foreground" },
   9: { label: "Verified", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
   10: { label: "Deleted", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
-  11: { label: "Queued", color: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
+  11: { label: "Queued", color: "bg-muted text-muted-foreground" },
 };
 
 const DTMF_MAP: Record<number, { label: string; color: string }> = {

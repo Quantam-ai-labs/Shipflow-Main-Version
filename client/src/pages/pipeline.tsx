@@ -285,7 +285,7 @@ function getStatusBadgeColor(workflowStatus: string | null | undefined): string 
     case 'DELIVERED': return "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300";
     case 'RETURN': return "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300";
     case 'CANCELLED': return "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
-    default: return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+    default: return "bg-muted text-muted-foreground";
   }
 }
 
@@ -1549,14 +1549,14 @@ export default function Pipeline() {
 
       {/* Selection Indicator */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 dark:bg-blue-950 border-b border-blue-200 dark:border-blue-800" data-testid="selection-indicator-bar">
-          <span className="text-sm font-medium text-blue-700 dark:text-blue-300" data-testid="text-selection-count">
+        <div className="flex items-center gap-3 px-4 py-2 bg-primary/10 border-b border-primary/20" data-testid="selection-indicator-bar">
+          <span className="text-sm font-medium text-primary" data-testid="text-selection-count">
             {selectedIds.size} order{selectedIds.size !== 1 ? "s" : ""} selected
           </span>
           <Button
             size="sm"
             variant="ghost"
-            className="text-xs text-blue-600 dark:text-blue-400"
+            className="text-xs text-primary/70"
             onClick={() => setSelectedIds(new Set())}
             data-testid="button-clear-selection"
           >
@@ -2000,7 +2000,7 @@ export default function Pipeline() {
                           (order as any).confirmationSource === "whatsapp" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
                           (order as any).confirmationSource === "robocall" ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" :
                           (order as any).confirmationSource === "manual" ? "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" :
-                          "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                          "bg-muted text-muted-foreground"
                         }`} title={`Confirmed via ${(order as any).confirmationSource}`} data-testid={`badge-source-${order.id}`}>
                           {(order as any).confirmationSource === "whatsapp" ? "WA" : (order as any).confirmationSource === "robocall" ? "RC" : "M"}
                         </span>
@@ -2169,7 +2169,7 @@ export default function Pipeline() {
                           {displayTags.map(tag => {
                             const roboStyle = getRoboTagStyle(tag, tagConfig);
                             return (
-                              <Badge key={tag} className={`text-[10px] px-1.5 py-0 leading-4 ${roboStyle || 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`} data-testid={`badge-tag-${tag}-${order.id}`}>
+                              <Badge key={tag} className={`text-[10px] px-1.5 py-0 leading-4 ${roboStyle || 'bg-muted text-muted-foreground'}`} data-testid={`badge-tag-${tag}-${order.id}`}>
                                 {tag.length > 12 ? tag.slice(0, 10) + ".." : tag}
                               </Badge>
                             );
@@ -2187,7 +2187,7 @@ export default function Pipeline() {
                   {/* Workflow status badge for ALL view */}
                   {activeTab === "ALL" && (
                     <td className="px-3 py-1.5" data-testid={`cell-workflow-status-${order.id}`}>
-                      <Badge className={`text-[10px] px-1.5 py-0 leading-4 ${WORKFLOW_STATUS_COLORS[order.workflowStatus || ""] || "bg-slate-100 text-slate-700"}`}>
+                      <Badge className={`text-[10px] px-1.5 py-0 leading-4 ${WORKFLOW_STATUS_COLORS[order.workflowStatus || ""] || "bg-muted text-muted-foreground"}`}>
                         {WORKFLOW_STATUS_LABELS[order.workflowStatus || ""] || order.workflowStatus || "Unknown"}
                       </Badge>
                     </td>
@@ -3432,7 +3432,7 @@ export default function Pipeline() {
                           o.workflowStatus === "DELIVERED" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
                           o.workflowStatus === "CANCELLED" ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" :
                           o.workflowStatus === "RETURN" ? "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300" :
-                          "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          "bg-muted text-muted-foreground"
                         }`}>
                           {o.workflowStatus}
                         </Badge>

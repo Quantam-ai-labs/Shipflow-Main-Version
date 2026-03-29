@@ -96,7 +96,7 @@ function getWorkflowBadge(workflowStatus: string | null) {
     FULFILLED: { bg: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "Fulfilled" },
     DELIVERED: { bg: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "Delivered" },
     RETURN: { bg: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300", label: "Return" },
-    CANCELLED: { bg: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400", label: "Cancelled" },
+    CANCELLED: { bg: "bg-muted text-muted-foreground", label: "Cancelled" },
   };
   const c = config[status] || config.NEW;
   return <Badge className={c.bg} data-testid="badge-workflow-stage">{c.label}</Badge>;
@@ -116,9 +116,9 @@ function getShipmentStatusColor(status: string): string {
     READY_FOR_RETURN: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
     RETURN_IN_TRANSIT: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
     RETURNED_TO_SHIPPER: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
-    CANCELLED: "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400",
+    CANCELLED: "bg-muted text-muted-foreground",
   };
-  return colorMap[status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+  return colorMap[status] || "bg-muted text-muted-foreground";
 }
 
 function getShipmentStatusBadge(normalizedStatus: string | null, rawStatus?: string | null) {
@@ -172,7 +172,7 @@ const RETURN_STAGES = [
   { key: "RETURNED_TO_SHIPPER", label: "Returned", icon: RotateCcw, color: "text-red-600 dark:text-red-400", bg: "bg-red-600", lightBg: "bg-red-100 dark:bg-red-950", ring: "ring-red-600/30" },
 ];
 
-const CANCELLED_STAGE = { key: "CANCELLED", label: "Cancelled", icon: XCircle, color: "text-gray-600 dark:text-gray-400", bg: "bg-gray-500", lightBg: "bg-gray-100 dark:bg-gray-900", ring: "ring-gray-500/30" };
+const CANCELLED_STAGE = { key: "CANCELLED", label: "Cancelled", icon: XCircle, color: "text-muted-foreground", bg: "bg-muted-foreground/60", lightBg: "bg-muted", ring: "ring-muted-foreground/20" };
 
 function getStageIndex(status: string | undefined): { pipeline: typeof PIPELINE_STAGES; activeIndex: number; isReturn: boolean; isCancelled: boolean } {
   if (!status) return { pipeline: PIPELINE_STAGES, activeIndex: -1, isReturn: false, isCancelled: false };
@@ -573,19 +573,19 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
     }
     if (vs === 2 || rc === 'Congestion') {
       return (
-        <div className="mt-2 px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+        <div className="mt-2 px-3 py-2 rounded-md bg-muted/50 border border-border">
           <div className="flex items-center gap-2">
-            <PhoneOff className="w-4 h-4 text-gray-400 shrink-0" />
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Network Issue</span>
+            <PhoneOff className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+            <span className="text-sm font-medium text-muted-foreground">Network Issue</span>
           </div>
         </div>
       );
     }
     return (
-      <div className="mt-2 px-3 py-2 rounded-md bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+      <div className="mt-2 px-3 py-2 rounded-md bg-muted/50 border border-border">
         <div className="flex items-center gap-2">
-          <PhoneOff className="w-4 h-4 text-gray-400 shrink-0" />
-          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Not Picked Up</span>
+          <PhoneOff className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+          <span className="text-sm font-medium text-muted-foreground">Not Picked Up</span>
         </div>
       </div>
     );
@@ -898,7 +898,7 @@ function getConfirmationSourceBadge(source: string | null | undefined) {
     robocall: { icon: Phone, cls: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "Robocall" },
     manual: { icon: UserCheck, cls: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "Manual" },
   };
-  const c = map[s] || { icon: Clock, cls: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300", label: source };
+  const c = map[s] || { icon: Clock, cls: "bg-muted text-muted-foreground", label: source };
   const Icon = c.icon;
   return (
     <Badge className={c.cls} data-testid="badge-confirmation-source">
@@ -1394,10 +1394,10 @@ function getTimelineEventColor(eventType: string): string {
     WA_NOT_AVAILABLE: "text-orange-500 bg-orange-100 dark:bg-orange-950",
     WA_PERMANENT_FAILURE: "text-red-500 bg-red-100 dark:bg-red-950",
     WA_REMINDER_SENT: "text-teal-500 bg-teal-100 dark:bg-teal-950",
-    WA_REMINDERS_CANCELLED: "text-gray-500 bg-gray-100 dark:bg-gray-950",
-    ROBO_QUEUE_CANCELLED: "text-gray-500 bg-gray-100 dark:bg-gray-950",
+    WA_REMINDERS_CANCELLED: "text-muted-foreground bg-muted",
+    ROBO_QUEUE_CANCELLED: "text-muted-foreground bg-muted",
     ROBO_EXHAUSTED: "text-orange-500 bg-orange-100 dark:bg-orange-950",
-    CHANNELS_CANCELLED: "text-gray-600 bg-gray-100 dark:bg-gray-950",
+    CHANNELS_CANCELLED: "text-muted-foreground bg-muted",
     MOVED_TO_PENDING: "text-yellow-500 bg-yellow-100 dark:bg-yellow-950",
     CALL_QUEUED: "text-blue-500 bg-blue-100 dark:bg-blue-950",
     CALL_ATTEMPTED: "text-indigo-500 bg-indigo-100 dark:bg-indigo-950",
@@ -1419,7 +1419,7 @@ function getChannelBadge(channel: string | null | undefined) {
     whatsapp: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
     robocall: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
     manual: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-    system: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+    system: "bg-muted text-muted-foreground",
   };
   return <Badge className={map[c] || map.system} variant="outline">{channel}</Badge>;
 }
@@ -2641,7 +2641,7 @@ export default function OrderDetails() {
                             o.workflowStatus === "DELIVERED" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
                             o.workflowStatus === "CANCELLED" ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" :
                             o.workflowStatus === "RETURN" ? "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300" :
-                            "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                            "bg-muted text-muted-foreground"
                           }`}>
                             {o.workflowStatus}
                           </Badge>
@@ -2843,7 +2843,7 @@ export default function OrderDetails() {
                           <Badge
                             key={index}
                             variant="secondary"
-                            className={`${getRoboStyle(tag) || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'} pr-1 flex items-center gap-1`}
+                            className={`${getRoboStyle(tag) || 'bg-muted text-muted-foreground'} pr-1 flex items-center gap-1`}
                             data-testid={`badge-tag-${index}`}
                           >
                             <span className="max-w-[120px] truncate">{tag}</span>

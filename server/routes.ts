@@ -719,7 +719,7 @@ export async function registerRoutes(
         ORDER BY day ASC
       `);
       const countMap: Record<string, number> = {};
-      for (const r of rows as any[]) {
+      for (const r of (rows as any).rows as any[]) {
         countMap[r.day] = r.count;
       }
       const result = [];

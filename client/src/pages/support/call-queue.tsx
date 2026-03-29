@@ -44,7 +44,7 @@ const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   completed: { label: "Completed", className: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
   processed: { label: "Processed", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300" },
   failed: { label: "Failed", className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
-  skipped: { label: "Skipped", className: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" },
+  skipped: { label: "Skipped", className: "bg-muted text-muted-foreground" },
   exhausted: { label: "Exhausted", className: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300" },
 };
 
@@ -190,7 +190,7 @@ export default function CallQueuePage() {
                 </TableHeader>
                 <TableBody>
                   {entries.map((entry, index) => {
-                    const statusInfo = STATUS_BADGE[entry.status] || { label: entry.status, className: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300" };
+                    const statusInfo = STATUS_BADGE[entry.status] || { label: entry.status, className: "bg-muted text-muted-foreground" };
                     return (
                       <TableRow key={entry.id || index} data-testid={`row-queue-entry-${index}`}>
                         <TableCell className="font-medium" data-testid={`text-order-number-${index}`}>{entry.orderNumber}</TableCell>

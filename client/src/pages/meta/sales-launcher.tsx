@@ -1437,7 +1437,7 @@ function LaunchJobHistory() {
         <CollapsibleTrigger asChild>
           <div className="px-5 py-3.5 cursor-pointer hover:bg-white/40 dark:hover:bg-white/[0.03] transition-all rounded-2xl">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-white/[0.06] flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center">
                 <History className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
               </div>
               <h2 className="text-sm font-semibold flex-1">Launch History</h2>

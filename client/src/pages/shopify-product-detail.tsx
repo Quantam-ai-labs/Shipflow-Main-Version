@@ -31,7 +31,7 @@ import type { Product } from "@shared/schema";
 import { formatPkDate, formatPkDateTime } from "@/lib/dateFormat";
 
 const WORKFLOW_STATUS_COLORS: Record<string, string> = {
-  NEW: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  NEW: "bg-muted text-muted-foreground",
   PENDING: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
   HOLD: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
   READY_TO_SHIP: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
@@ -126,7 +126,7 @@ function PurchaseSummary({ productId }: { productId: string }) {
             {purchases.map((p) => {
               const colorClass =
                 WORKFLOW_STATUS_COLORS[p.workflowStatus] ||
-                "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+                "bg-muted text-muted-foreground";
               return (
                 <TableRow
                   key={`${p.orderId}-${p.quantity}`}

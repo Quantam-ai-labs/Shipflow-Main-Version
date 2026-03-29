@@ -50,7 +50,7 @@ import type { Product } from "@shared/schema";
 import { exportCsvWithDate } from "@/lib/exportCsv";
 
 const WORKFLOW_STATUS_COLORS: Record<string, string> = {
-  'NEW': "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  'NEW': "bg-muted text-muted-foreground",
   'PENDING': "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
   'HOLD': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
   'READY_TO_SHIP': "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
@@ -106,7 +106,7 @@ function PurchaseSummary({ productId }: { productId: string }) {
   const totalQty = purchases.reduce((sum, p) => sum + (p.quantity || 1), 0);
 
   const STATUS_CARD_CONFIG: { key: string; label: string; text: string; bg: string }[] = [
-    { key: 'NEW', label: 'New', text: 'text-slate-700 dark:text-slate-300', bg: 'bg-slate-50 dark:bg-slate-900' },
+    { key: 'NEW', label: 'New', text: 'text-muted-foreground', bg: 'bg-muted' },
     { key: 'PENDING', label: 'Pending', text: 'text-yellow-700 dark:text-yellow-300', bg: 'bg-yellow-50 dark:bg-yellow-900/30' },
     { key: 'HOLD', label: 'Hold', text: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-900/30' },
     { key: 'READY_TO_SHIP', label: 'Ready', text: 'text-cyan-700 dark:text-cyan-300', bg: 'bg-cyan-50 dark:bg-cyan-900/30' },
@@ -149,7 +149,7 @@ function PurchaseSummary({ productId }: { productId: string }) {
         </TableHeader>
         <TableBody>
           {purchases.map((p) => {
-            const colorClass = WORKFLOW_STATUS_COLORS[p.workflowStatus] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+            const colorClass = WORKFLOW_STATUS_COLORS[p.workflowStatus] || "bg-muted text-muted-foreground";
             return (
               <TableRow
                 key={`${p.orderId}-${p.quantity}`}

@@ -64,7 +64,7 @@ const STATUS_COLORS: Record<string, string> = {
   'READY_FOR_RETURN': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
   'RETURN_IN_TRANSIT': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
   'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  'Unfulfilled': "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  'Unfulfilled': "bg-muted text-muted-foreground",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -85,7 +85,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function getStatusColor(status: string): string {
-  return STATUS_COLORS[status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+  return STATUS_COLORS[status] || "bg-muted text-muted-foreground";
 }
 
 function getStatusLabel(status: string): string {

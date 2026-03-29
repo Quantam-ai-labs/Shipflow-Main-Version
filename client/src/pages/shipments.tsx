@@ -582,7 +582,7 @@ export default function Shipments() {
                             </TableCell>
                             <TableCell className="text-sm">
                               {order.courierRawStatus ? (
-                                <Badge className="text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                <Badge className="text-xs font-medium bg-muted text-muted-foreground">
                                   {order.courierRawStatus}
                                 </Badge>
                               ) : "-"}
