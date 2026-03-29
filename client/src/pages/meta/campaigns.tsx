@@ -324,23 +324,23 @@ export default function MetaCampaigns() {
                         <p className="font-medium text-sm truncate" data-testid={`text-campaign-name-${campaign.id}`}>{campaign.name}</p>
                         {getStatusBadge(campaign.status)}
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-3 mt-1 text-xs text-white/40">
                         <span data-testid={`text-campaign-objective-${campaign.id}`}>{campaign.objective?.replace("OUTCOME_", "")}</span>
-                        {campaign.daily_budget && <span>Daily: {formatBudget(campaign.daily_budget)}</span>}
-                        {campaign.lifetime_budget && <span>Lifetime: {formatBudget(campaign.lifetime_budget)}</span>}
+                        {campaign.daily_budget && <span>Daily: <span className="text-emerald-400 font-medium">{formatBudget(campaign.daily_budget)}</span></span>}
+                        {campaign.lifetime_budget && <span>Lifetime: <span className="text-emerald-400 font-medium">{formatBudget(campaign.lifetime_budget)}</span></span>}
                         <span>{new Date(campaign.created_time).toLocaleDateString()}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       {(campaign.status === "ACTIVE" || campaign.status === "PAUSED") && (
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">{campaign.status === "ACTIVE" ? "Active" : "Paused"}</span>
+                          <span className={`text-xs ${campaign.status === "ACTIVE" ? "text-emerald-400" : "text-white/30"}`}>{campaign.status === "ACTIVE" ? "Active" : "Paused"}</span>
                           <Switch checked={campaign.status === "ACTIVE"} disabled={togglingId === campaign.id || toggleMutation.isPending}
                             onCheckedChange={(checked) => { setTogglingId(campaign.id); toggleMutation.mutate({ campaignId: campaign.id, status: checked ? "ACTIVE" : "PAUSED" }); }}
                             data-testid={`switch-campaign-${campaign.id}`} />
                         </div>
                       )}
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-blue-400 hover:text-blue-300"
                         onClick={() => window.open(`https://www.facebook.com/adsmanager/manage/campaigns?act=${campaign.id}`, "_blank")}
                         data-testid={`button-open-campaign-${campaign.id}`}>
                         <ExternalLink className="w-3.5 h-3.5" />

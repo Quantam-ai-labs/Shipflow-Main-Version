@@ -565,8 +565,8 @@ export default function AdsManager() {
           </Card>
           <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="p-3">
-              <div className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Cost/Purchase</div>
-              <div className="text-lg font-bold mt-0.5 text-white/90" data-testid="text-total-cpa">{formatCurrency(data.totals.costPerPurchase)}</div>
+              <div className="text-[10px] text-white/40 font-medium uppercase tracking-wider">CPC</div>
+              <div className="text-lg font-bold mt-0.5 text-blue-400" data-testid="text-total-cpa">{formatCurrency(data.totals.cpc ?? data.totals.costPerPurchase)}</div>
             </CardContent>
           </Card>
         </div>

@@ -691,6 +691,30 @@ export default function SalesLauncher() {
         </div>
       </div>
 
+      {/* Step Indicator */}
+      <div className="flex items-center gap-1 overflow-x-auto pb-1" data-testid="step-indicator">
+        {[
+          { num: 1, label: "Connection", section: "section-diagnostics" },
+          { num: 2, label: "Campaign", section: "section-campaign" },
+          { num: 3, label: "Ad Sets", section: "section-adsets" },
+          { num: 4, label: "Launch", section: "section-validation" },
+          { num: 5, label: "History", section: "section-launch-history" },
+        ].map((s, i) => (
+          <>
+            <div key={s.num} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap
+              ${i === 0 ? "bg-blue-500/20 border border-blue-500/40 text-blue-400" : "bg-white/[0.04] border border-white/[0.08] text-white/40"}`}
+              data-testid={`step-${s.num}`}>
+              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold
+                ${i === 0 ? "bg-blue-500 text-white" : "bg-white/[0.08] text-white/40"}`}>
+                {s.num}
+              </span>
+              {s.label}
+            </div>
+            {i < 4 && <div className="w-4 h-px bg-white/[0.1] flex-shrink-0" />}
+          </>
+        ))}
+      </div>
+
       {/* SECTION A: Connection & Diagnostics */}
       <div className={glassCard} data-testid="section-diagnostics">
         <div className="px-5 pt-4 pb-3">
