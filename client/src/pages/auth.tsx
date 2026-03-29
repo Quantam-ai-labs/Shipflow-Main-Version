@@ -238,7 +238,7 @@ export default function AuthPage() {
             height: 400,
             top: "40%",
             left: "55%",
-            background: "radial-gradient(circle, rgba(245,158,11,0.12) 0%, transparent 70%)",
+            background: "radial-gradient(circle, rgba(245,158,11,0.15) 0%, transparent 70%)",
           }}
         />
       </div>
