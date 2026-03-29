@@ -121,7 +121,7 @@ function StatCard({
 }) {
   if (isLoading) {
     return (
-      <Card className="bg-[#0d1322] border-white/[0.08]">
+      <Card>
         <CardContent className="p-4">
           <div className="space-y-2">
             <Skeleton className="h-3 w-20" />
@@ -134,12 +134,12 @@ function StatCard({
   }
 
   return (
-    <Card className="bg-[#0d1322] border-white/[0.08]">
+    <Card className="border-l-[3px] border-l-primary">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0">
-            <p className="text-[11px] font-medium text-white/40 uppercase tracking-wider">{title}</p>
-            <p className="text-2xl font-semibold text-white">{value}</p>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+            <p className="text-2xl font-semibold">{value}</p>
             {trend !== undefined && (
               <div className="flex items-center gap-1 text-xs">
                 {trend >= 0 ? (
@@ -150,14 +150,14 @@ function StatCard({
                 <span className={trend >= 0 ? "text-green-500" : "text-red-500"}>
                   {trend >= 0 ? "+" : ""}{trend}%
                 </span>
-                <span className="text-white/40">{trendLabel}</span>
+                <span className="text-muted-foreground">{trendLabel}</span>
               </div>
             )}
             {subtitle && (
-              <p className="text-[11px] text-white/40">{subtitle}</p>
+              <p className="text-xs text-muted-foreground">{subtitle}</p>
             )}
           </div>
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center bg-white/[0.06] shrink-0`}>
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center bg-primary/10 shrink-0`}>
             <Icon className={`w-4 h-4 ${iconColor}`} />
           </div>
         </div>
@@ -1057,7 +1057,7 @@ export default function Dashboard() {
                   title="Dispatched"
                   value={countsLoading ? "—" : dispatched.toLocaleString()}
                   icon={Send}
-                  iconColor="text-white/60"
+                  iconColor="text-muted-foreground"
                   subtitle={countsLoading ? undefined : fmtCod(dispatchedCod)}
                   isLoading={countsLoading}
                 />
@@ -1065,7 +1065,7 @@ export default function Dashboard() {
                   title="Delivered"
                   value={countsLoading ? "—" : delivered.toLocaleString()}
                   icon={CheckCircle2}
-                  iconColor="text-emerald-400"
+                  iconColor="text-emerald-500"
                   subtitle={countsLoading ? undefined : fmtCod(deliveredCod)}
                   isLoading={countsLoading}
                 />
@@ -1073,7 +1073,7 @@ export default function Dashboard() {
                   title="Pending"
                   value={countsLoading ? "—" : pending.toLocaleString()}
                   icon={Clock}
-                  iconColor="text-amber-400"
+                  iconColor="text-amber-500"
                   subtitle={countsLoading ? undefined : fmtCod(pendingCod)}
                   isLoading={countsLoading}
                 />
@@ -1081,7 +1081,7 @@ export default function Dashboard() {
                   title="Cancelled"
                   value={countsLoading ? "—" : cancelled.toLocaleString()}
                   icon={Ban}
-                  iconColor="text-red-400"
+                  iconColor="text-red-500"
                   subtitle={countsLoading ? undefined : fmtCod(cancelledCod)}
                   isLoading={countsLoading}
                 />
@@ -1101,6 +1101,14 @@ export default function Dashboard() {
                   isLoading={countsLoading}
                 />
                 <KpiMetricCard
+                  label="Cancellation Ratio"
+                  value={cancellationRatio}
+                  subtitle={`${cancelled.toLocaleString()} cancelled / ${total.toLocaleString()} total`}
+                  icon={Ban}
+                  iconColor="text-red-400"
+                  isLoading={countsLoading}
+                />
+                <KpiMetricCard
                   label="Delivery Ratio"
                   value={deliveryRatio}
                   subtitle={`${delivered.toLocaleString()} delivered / ${dispatched.toLocaleString()} dispatched`}
@@ -1109,7 +1117,7 @@ export default function Dashboard() {
                   isLoading={countsLoading}
                 />
                 <KpiMetricCard
-                  label="Pending in Transit"
+                  label="Pending Ratio"
                   value={pendingRatio}
                   subtitle={`${fulfilled.toLocaleString()} fulfilled / ${dispatched.toLocaleString()} dispatched`}
                   icon={Clock}
@@ -1122,14 +1130,6 @@ export default function Dashboard() {
                   subtitle={`${returned.toLocaleString()} returned / ${dispatched.toLocaleString()} dispatched`}
                   icon={TrendingDown}
                   iconColor="text-rose-400"
-                  isLoading={countsLoading}
-                />
-                <KpiMetricCard
-                  label="Cancellation Ratio"
-                  value={cancellationRatio}
-                  subtitle={`${cancelled.toLocaleString()} cancelled / ${total.toLocaleString()} total`}
-                  icon={Ban}
-                  iconColor="text-red-400"
                   isLoading={countsLoading}
                 />
               </div>
@@ -1295,13 +1295,13 @@ export default function Dashboard() {
               </div>
 
               <div className="space-y-4">
-                <Card className="bg-[#0d1322] border-white/[0.08]">
+                <Card className="border-l-[3px] border-l-amber-500">
                   <CardContent className="p-4">
-                    <p className="text-[11px] font-medium text-amber-400/80 uppercase tracking-wider">COD Pending Collection</p>
+                    <p className="text-xs font-medium text-amber-400/80 uppercase tracking-wide">COD Pending Collection</p>
                     {statsLoading ? (
                       <Skeleton className="h-8 w-32 mt-2" />
                     ) : (
-                      <p className="text-2xl font-semibold mt-1 tabular-nums text-white" data-testid="text-cod-pending">
+                      <p className="text-2xl font-semibold mt-1 tabular-nums" data-testid="text-cod-pending">
                         PKR {stats?.codPending ?? "0"}
                       </p>
                     )}
