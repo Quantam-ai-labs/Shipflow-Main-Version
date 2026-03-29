@@ -147,8 +147,8 @@ const ContactPage = lazy(() => import("@/pages/contact"));
 const LoadsheetPage = lazy(() => import("@/pages/loadsheet"));
 function OnboardingBanner() {
   return (
-    <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-4 py-2 flex items-center justify-between gap-2" data-testid="banner-onboarding">
-      <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
+    <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-between gap-2" data-testid="banner-onboarding">
+      <div className="flex items-center gap-2 text-sm text-amber-400">
         <AlertTriangle className="w-4 h-4 shrink-0" />
         <span>Setup incomplete</span>
       </div>

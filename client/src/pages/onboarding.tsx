@@ -284,8 +284,8 @@ export default function Onboarding() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         {isNonCanonicalHost && currentStepIndex <= 1 && (
-          <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg flex items-center justify-between gap-2 flex-wrap" data-testid="banner-canonical-host">
-            <p className="text-sm text-amber-800 dark:text-amber-200">
+          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center justify-between gap-2 flex-wrap" data-testid="banner-canonical-host">
+            <p className="text-sm text-amber-300">
               <AlertCircle className="w-4 h-4 inline mr-1.5" />
               For Shopify connect, please use the official app URL.
             </p>
@@ -336,11 +336,11 @@ export default function Onboarding() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {shopifyConnected ? (
-                  <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-                    <CheckCircle className="w-6 h-6 text-green-600" />
+                  <div className="flex items-center gap-3 p-4 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                    <CheckCircle className="w-6 h-6 text-emerald-400" />
                     <div>
-                      <p className="font-medium text-green-800 dark:text-green-200">Shopify Connected</p>
-                      <p className="text-sm text-green-600 dark:text-green-400">{integrations?.shopify?.shopDomain}</p>
+                      <p className="font-medium text-emerald-300">Shopify Connected</p>
+                      <p className="text-sm text-emerald-400">{integrations?.shopify?.shopDomain}</p>
                     </div>
                   </div>
                 ) : (
@@ -615,8 +615,8 @@ export default function Onboarding() {
                     <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-2" />
                     <h3 className="text-lg font-medium" data-testid="text-import-failed">Import Failed</h3>
                     {importJob.lastError && (
-                      <div className="max-w-md mx-auto p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800">
-                        <p className="text-sm text-red-700 dark:text-red-300 break-words" data-testid="text-error-message">{importJob.lastError}</p>
+                      <div className="max-w-md mx-auto p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                        <p className="text-sm text-red-400 break-words" data-testid="text-error-message">{importJob.lastError}</p>
                         {importJob.lastErrorStage && (
                           <p className="text-xs text-red-500 mt-1">Stage: {importJob.lastErrorStage}</p>
                         )}

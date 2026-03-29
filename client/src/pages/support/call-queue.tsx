@@ -39,13 +39,13 @@ interface QueueEntry {
 }
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  waiting: { label: "Waiting", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" },
-  sending: { label: "Sending", className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" },
-  completed: { label: "Completed", className: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
-  processed: { label: "Processed", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300" },
-  failed: { label: "Failed", className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+  waiting: { label: "Waiting", className: "bg-amber-500/10 text-amber-400 border border-amber-500/20" },
+  sending: { label: "Sending", className: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
+  completed: { label: "Completed", className: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
+  processed: { label: "Processed", className: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
+  failed: { label: "Failed", className: "bg-red-500/10 text-red-400 border border-red-500/20" },
   skipped: { label: "Skipped", className: "bg-muted text-muted-foreground" },
-  exhausted: { label: "Exhausted", className: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300" },
+  exhausted: { label: "Exhausted", className: "bg-orange-500/10 text-orange-400 border border-orange-500/20" },
 };
 
 function formatDate(dateStr: string | null) {
@@ -215,7 +215,7 @@ export default function CallQueuePage() {
                         </TableCell>
                         <TableCell data-testid={`text-wa-response-${index}`}>
                           {entry.waResponseArrived ? (
-                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">Yes</Badge>
+                            <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Yes</Badge>
                           ) : (
                             <span className="text-muted-foreground">No</span>
                           )}

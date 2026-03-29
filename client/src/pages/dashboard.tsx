@@ -69,9 +69,9 @@ const DEFAULT_TAG_CONFIG = { confirm: "Robo-Confirm", pending: "Robo-Pending", c
 function getRoboTagStyle(tag: string, tagConfig?: { confirm: string; pending: string; cancel: string } | null): string | null {
   const config = tagConfig || DEFAULT_TAG_CONFIG;
   const lowerTag = tag.toLowerCase();
-  if (lowerTag === config.confirm.toLowerCase()) return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
-  if (lowerTag === config.pending.toLowerCase()) return 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300';
-  if (lowerTag === config.cancel.toLowerCase()) return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
+  if (lowerTag === config.confirm.toLowerCase()) return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+  if (lowerTag === config.pending.toLowerCase()) return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
+  if (lowerTag === config.cancel.toLowerCase()) return 'bg-red-500/10 text-red-400 border border-red-500/20';
   return null;
 }
 
@@ -214,12 +214,12 @@ function truncateStatus(status: string, wordCount: number = 3): string {
 
 function getStatusBadgeColor(workflowStatus: string | null | undefined): string {
   switch (workflowStatus) {
-    case 'BOOKED': return "bg-blue-500/10 text-blue-600 border-blue-500/20";
-    case 'FULFILLED': return "bg-indigo-500/10 text-indigo-600 border-indigo-500/20";
-    case 'DELIVERED': return "bg-green-500/10 text-green-600 border-green-500/20";
-    case 'RETURN': return "bg-red-500/10 text-red-600 border-red-500/20";
-    case 'CANCELLED': return "bg-red-500/10 text-red-600 border-red-500/20";
-    default: return "bg-gray-500/10 text-gray-600 border-gray-500/20";
+    case 'BOOKED': return "bg-blue-500/10 text-blue-400 border border-blue-500/20";
+    case 'FULFILLED': return "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20";
+    case 'DELIVERED': return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+    case 'RETURN': return "bg-red-500/10 text-red-400 border border-red-500/20";
+    case 'CANCELLED': return "bg-red-500/10 text-red-400 border border-red-500/20";
+    default: return "bg-muted text-muted-foreground";
   }
 }
 
@@ -247,15 +247,15 @@ const WORKFLOW_STAGE_LABELS: Record<string, string> = {
 };
 
 const WORKFLOW_STAGE_COLORS: Record<string, string> = {
-  NEW: "bg-gray-500/10 text-gray-600 border-gray-500/20",
-  PENDING: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
-  HOLD: "bg-orange-500/10 text-orange-600 border-orange-500/20",
-  READY_TO_SHIP: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-  BOOKED: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
-  FULFILLED: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-  DELIVERED: "bg-green-500/10 text-green-600 border-green-500/20",
-  RETURN: "bg-red-500/10 text-red-600 border-red-500/20",
-  CANCELLED: "bg-red-500/10 text-red-600 border-red-500/20",
+  NEW: "bg-muted text-muted-foreground",
+  PENDING: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+  HOLD: "bg-orange-500/10 text-orange-400 border border-orange-500/20",
+  READY_TO_SHIP: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20",
+  BOOKED: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+  FULFILLED: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20",
+  DELIVERED: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+  RETURN: "bg-red-500/10 text-red-400 border border-red-500/20",
+  CANCELLED: "bg-red-500/10 text-red-400 border border-red-500/20",
 };
 
 function getStageFeatures(order: Order): string {
@@ -715,8 +715,8 @@ function OrderSearchSection() {
                                     {String(order.orderNumber || '').replace(/^#/, '')}
                                   </Link>
                                   {order.orderSource === "shopify_draft_order" && (
-                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order">
-                                      <PenLine className="w-2.5 h-2.5 text-green-700 dark:text-green-300" />
+                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500/10 border border-emerald-500/30" title="Custom Order">
+                                      <PenLine className="w-2.5 h-2.5 text-emerald-400" />
                                     </span>
                                   )}
                                 </div>

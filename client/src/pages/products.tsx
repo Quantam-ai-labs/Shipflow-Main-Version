@@ -51,14 +51,14 @@ import { exportCsvWithDate } from "@/lib/exportCsv";
 
 const WORKFLOW_STATUS_COLORS: Record<string, string> = {
   'NEW': "bg-muted text-muted-foreground",
-  'PENDING': "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-  'HOLD': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-  'READY_TO_SHIP': "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
-  'BOOKED': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-  'FULFILLED': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-  'DELIVERED': "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-  'RETURN': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  'PENDING': "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+  'HOLD': "bg-orange-500/10 text-orange-400 border border-orange-500/20",
+  'READY_TO_SHIP': "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20",
+  'BOOKED': "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+  'FULFILLED': "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20",
+  'DELIVERED': "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+  'RETURN': "bg-red-500/10 text-red-400 border border-red-500/20",
+  'CANCELLED': "bg-red-500/10 text-red-400 border border-red-500/20",
 };
 
 interface Purchase {
@@ -107,14 +107,14 @@ function PurchaseSummary({ productId }: { productId: string }) {
 
   const STATUS_CARD_CONFIG: { key: string; label: string; text: string; bg: string }[] = [
     { key: 'NEW', label: 'New', text: 'text-muted-foreground', bg: 'bg-muted' },
-    { key: 'PENDING', label: 'Pending', text: 'text-yellow-700 dark:text-yellow-300', bg: 'bg-yellow-50 dark:bg-yellow-900/30' },
-    { key: 'HOLD', label: 'Hold', text: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-900/30' },
-    { key: 'READY_TO_SHIP', label: 'Ready', text: 'text-cyan-700 dark:text-cyan-300', bg: 'bg-cyan-50 dark:bg-cyan-900/30' },
-    { key: 'BOOKED', label: 'Booked', text: 'text-blue-700 dark:text-blue-300', bg: 'bg-blue-50 dark:bg-blue-900/30' },
-    { key: 'FULFILLED', label: 'Fulfilled', text: 'text-indigo-700 dark:text-indigo-300', bg: 'bg-indigo-50 dark:bg-indigo-900/30' },
-    { key: 'DELIVERED', label: 'Delivered', text: 'text-green-700 dark:text-green-300', bg: 'bg-green-50 dark:bg-green-900/30' },
-    { key: 'RETURN', label: 'Return', text: 'text-red-700 dark:text-red-300', bg: 'bg-red-50 dark:bg-red-900/30' },
-    { key: 'CANCELLED', label: 'Cancelled', text: 'text-rose-700 dark:text-rose-300', bg: 'bg-rose-50 dark:bg-rose-900/30' },
+    { key: 'PENDING', label: 'Pending', text: 'text-amber-400', bg: 'bg-amber-500/10' },
+    { key: 'HOLD', label: 'Hold', text: 'text-orange-400', bg: 'bg-orange-500/10' },
+    { key: 'READY_TO_SHIP', label: 'Ready', text: 'text-cyan-400', bg: 'bg-cyan-500/10' },
+    { key: 'BOOKED', label: 'Booked', text: 'text-blue-400', bg: 'bg-blue-500/10' },
+    { key: 'FULFILLED', label: 'Fulfilled', text: 'text-indigo-400', bg: 'bg-indigo-500/10' },
+    { key: 'DELIVERED', label: 'Delivered', text: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    { key: 'RETURN', label: 'Return', text: 'text-red-400', bg: 'bg-red-500/10' },
+    { key: 'CANCELLED', label: 'Cancelled', text: 'text-rose-400', bg: 'bg-rose-500/10' },
   ].filter(s => (statusQty[s.key] || 0) > 0);
 
   return (

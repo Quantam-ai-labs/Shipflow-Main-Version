@@ -492,7 +492,7 @@ function ComplaintDetailPanel({
           )}
 
           {complaint.status === "resolved" && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-300 text-xs">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs">
               <CheckCircle2 className="w-4 h-4" />
               Complaint resolved
             </div>

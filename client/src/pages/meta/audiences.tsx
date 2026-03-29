@@ -146,7 +146,7 @@ export default function MetaAudiences() {
       case "website":
         return <Badge variant="secondary" className="text-xs"><Globe className="w-3 h-3 mr-1" />Website Visitors</Badge>;
       case "lookalike":
-        return <Badge className="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 text-xs"><Copy className="w-3 h-3 mr-1" />Lookalike</Badge>;
+        return <Badge className="bg-violet-500/10 text-violet-400 border border-violet-500/20 text-xs"><Copy className="w-3 h-3 mr-1" />Lookalike</Badge>;
       default:
         return <Badge variant="outline" className="text-xs">{type}</Badge>;
     }

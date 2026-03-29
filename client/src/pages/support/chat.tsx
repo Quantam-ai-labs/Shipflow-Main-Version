@@ -274,7 +274,7 @@ function highlightSearchText(text: string, query: string): JSX.Element {
   return (
     <>
       {text.slice(0, idx)}
-      <mark className="bg-yellow-300 dark:bg-yellow-600 text-inherit rounded-sm px-px">{text.slice(idx, idx + query.length)}</mark>
+      <mark className="bg-yellow-400/40 text-inherit rounded-sm px-px">{text.slice(idx, idx + query.length)}</mark>
       {highlightSearchText(text.slice(idx + query.length), query)}
     </>
   );
@@ -2427,7 +2427,7 @@ export default function SupportChatPage() {
                                   isOutbound
                                     ? "wa-bubble-out text-[#111b21] dark:text-[#e9edef] rounded-tr-none"
                                     : "wa-bubble-in text-[#111b21] dark:text-[#e9edef] rounded-tl-none",
-                                  isHighlighted && "ring-2 ring-yellow-400 ring-offset-1 bg-yellow-50 dark:bg-yellow-900/30",
+                                  isHighlighted && "ring-2 ring-yellow-400 ring-offset-1 bg-yellow-400/20",
                                   isCurrentSearchTarget && "ring-2 ring-[#008069] ring-offset-1 bg-[#008069]/10 dark:bg-[#008069]/20",
                                   isSearchMatch && !isCurrentSearchTarget && "ring-1 ring-[#008069]/40 bg-[#008069]/5 dark:bg-[#008069]/10"
                                 )}>
@@ -3306,8 +3306,8 @@ function FileComplaintFromChat({
         </DialogHeader>
         {ticketCreated ? (
           <div className="text-center py-4 space-y-3">
-            <div className="w-12 h-12 bg-green-100 dark:bg-green-950/30 rounded-full flex items-center justify-center mx-auto">
-              <ClipboardList className="w-6 h-6 text-green-600" />
+            <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center mx-auto">
+              <ClipboardList className="w-6 h-6 text-green-400" />
             </div>
             <div>
               <p className="text-sm font-medium">Complaint Filed</p>

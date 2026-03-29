@@ -333,7 +333,7 @@ export default function OpeningBalancesPage() {
         <div className="flex items-center gap-2">
           {isManuallyUnlocked ? (
             <>
-              <Badge className="gap-1 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-700" data-testid="badge-unlocked">
+              <Badge className="gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-testid="badge-unlocked">
                 <LockOpen className="h-3 w-3" /> Unlocked
               </Badge>
               {isAdmin && (
@@ -372,9 +372,9 @@ export default function OpeningBalancesPage() {
       </div>
 
       {(isLocked || isManuallyUnlocked) && (
-        <Alert data-testid="alert-lock-status" className={isManuallyUnlocked ? "border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-950/30" : ""}>
-          {isManuallyUnlocked ? <LockOpen className="h-4 w-4 text-green-600 dark:text-green-400" /> : <AlertTriangle className="h-4 w-4" />}
-          <AlertDescription className={isManuallyUnlocked ? "text-green-700 dark:text-green-300" : ""}>
+        <Alert data-testid="alert-lock-status" className={isManuallyUnlocked ? "border-emerald-500/20 bg-emerald-500/10" : ""}>
+          {isManuallyUnlocked ? <LockOpen className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4" />}
+          <AlertDescription className={isManuallyUnlocked ? "text-emerald-300" : ""}>
             {isManuallyUnlocked
               ? "System is temporarily unlocked. You can post new opening balances. Re-lock when done to protect your financial records."
               : "System is locked because transactions have been recorded. You can view existing batches and reverse them, but cannot post new opening balances."

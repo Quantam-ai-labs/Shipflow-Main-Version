@@ -663,7 +663,7 @@ export default function SalesLauncher() {
       <div className="p-4 md:p-6 max-w-[880px] mx-auto space-y-6" data-testid="sales-launcher-page">
         <h1 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">Sales Launcher</h1>
         <div className={`${glassCard} p-8 text-center space-y-4`}>
-          <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center mx-auto">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto">
             <AlertTriangle className="h-8 w-8 text-amber-500" />
           </div>
           <p className="text-lg font-medium">Meta Not Connected</p>
@@ -684,9 +684,9 @@ export default function SalesLauncher() {
           {totalAds > 1 && (
             <span className="text-xs text-muted-foreground">{adSets.length} ad set{adSets.length > 1 ? "s" : ""} · {totalAds} ad{totalAds > 1 ? "s" : ""}</span>
           )}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200/60 dark:border-emerald-500/20">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">{metaStatus?.businessName || "Connected"}</span>
+            <span className="text-xs font-medium text-emerald-400">{metaStatus?.businessName || "Connected"}</span>
           </div>
         </div>
       </div>
@@ -695,8 +695,8 @@ export default function SalesLauncher() {
       <div className={glassCard} data-testid="section-diagnostics">
         <div className="px-5 pt-4 pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center">
-              <Globe className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+            <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
+              <Globe className="h-3.5 w-3.5 text-blue-400" />
             </div>
             <div>
               <h2 className="text-sm font-semibold">Connection & Diagnostics</h2>
@@ -785,8 +785,8 @@ export default function SalesLauncher() {
       <div className={glassCard} data-testid="section-campaign">
         <div className="px-5 pt-4 pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-violet-50 dark:bg-violet-500/10 flex items-center justify-center">
-              <Target className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+            <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
+              <Target className="h-3.5 w-3.5 text-violet-400" />
             </div>
             <div>
               <h2 className="text-sm font-semibold">Campaign Settings</h2>
@@ -876,8 +876,8 @@ export default function SalesLauncher() {
       <div className="space-y-3" data-testid="section-adsets">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center">
-              <Layers className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+            <div className="w-7 h-7 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+              <Layers className="h-3.5 w-3.5 text-indigo-400" />
             </div>
             <h2 className="text-sm font-semibold">Ad Sets & Ads</h2>
             <Badge variant="secondary" className="text-[10px]">{adSets.length} set{adSets.length > 1 ? "s" : ""} · {totalAds} ad{totalAds > 1 ? "s" : ""}</Badge>
@@ -927,7 +927,7 @@ export default function SalesLauncher() {
                       {adSet.targetCountries.map(code => {
                         const c = ASIAN_COUNTRIES.find(a => a.code === code);
                         return (
-                          <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 text-[10px] font-medium" data-testid={`country-tag-${si}-${code}`}>
+                          <span key={code} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 text-[10px] font-medium" data-testid={`country-tag-${si}-${code}`}>
                             {c?.name || code}
                             <button onClick={() => updateAdSet(si, { targetCountries: adSet.targetCountries.filter(cc => cc !== code) })} className="hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
                           </span>
@@ -956,7 +956,7 @@ export default function SalesLauncher() {
                       <Label className="text-[10px] font-medium text-muted-foreground">Pakistan Cities <span className="font-normal">(optional)</span></Label>
                       <div className="flex flex-wrap gap-1 mt-1 mb-1.5">
                         {adSet.targetCities.map(city => (
-                          <span key={city.key} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-300 text-[10px] font-medium" data-testid={`city-tag-${si}-${city.key}`}>
+                          <span key={city.key} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-500/10 text-orange-400 text-[10px] font-medium" data-testid={`city-tag-${si}-${city.key}`}>
                             {city.name}
                             <button onClick={() => updateAdSet(si, { targetCities: adSet.targetCities.filter(c => c.key !== city.key) })} className="hover:text-red-500"><X className="h-2.5 w-2.5" /></button>
                           </span>
@@ -1135,7 +1135,7 @@ export default function SalesLauncher() {
                               <button key={src} onClick={() => setPostSourceFilter(src)}
                                 className={`px-2 py-0.5 rounded-md text-[9px] font-medium transition-all ${
                                   postSourceFilter === src
-                                    ? "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300 ring-1 ring-blue-300/50"
+                                    ? "bg-blue-500/15 text-blue-300 ring-1 ring-blue-300/50"
                                     : "bg-black/[0.03] dark:bg-white/[0.06] text-muted-foreground hover:bg-black/[0.06]"
                                 }`} data-testid={`filter-${src}-${si}-${ai}`}
                               >{src} ({sourceCount[src]})</button>
@@ -1158,7 +1158,7 @@ export default function SalesLauncher() {
                                   });
                                 }}
                                 className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-[10px] transition-all ${
-                                  ad.selectedPostId === post.id ? "bg-blue-50 dark:bg-blue-500/10 ring-1 ring-blue-300/50" : "hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
+                                  ad.selectedPostId === post.id ? "bg-blue-500/10 ring-1 ring-blue-300/50" : "hover:bg-white/[0.03]"
                                 } ${post.source === "library" ? "opacity-60" : ""}`}
                                 data-testid={`post-item-${si}-${ai}-${post.id}`}
                               >
@@ -1260,13 +1260,13 @@ export default function SalesLauncher() {
       <div className={glassCard} data-testid="section-validation">
         <div className="px-5 pt-4 pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
-              <Zap className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <Zap className="h-3.5 w-3.5 text-emerald-400" />
             </div>
             <div className="flex-1">
               <h2 className="text-sm font-semibold">Pre-Launch Checklist</h2>
             </div>
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${allValid ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400"}`}>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${allValid ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"}`}>
               {validCount}/{validationChecklist.length}
             </span>
           </div>

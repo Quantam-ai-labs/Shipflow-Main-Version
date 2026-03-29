@@ -57,23 +57,23 @@ interface CallRecord {
 }
 
 const CALL_STATUS_MAP: Record<number, { label: string; color: string }> = {
-  1: { label: "Initiated", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" },
-  2: { label: "Congestion", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300" },
-  3: { label: "No Response", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
-  4: { label: "Answered", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
-  5: { label: "Busy", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300" },
-  6: { label: "Hangup", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
-  7: { label: "Limit Exceeded", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+  1: { label: "Initiated", color: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
+  2: { label: "Congestion", color: "bg-orange-500/10 text-orange-400 border border-orange-500/20" },
+  3: { label: "No Response", color: "bg-red-500/10 text-red-400 border border-red-500/20" },
+  4: { label: "Answered", color: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
+  5: { label: "Busy", color: "bg-amber-500/10 text-amber-400 border border-amber-500/20" },
+  6: { label: "Hangup", color: "bg-red-500/10 text-red-400 border border-red-500/20" },
+  7: { label: "Limit Exceeded", color: "bg-red-500/10 text-red-400 border border-red-500/20" },
   8: { label: "Sent to SIP", color: "bg-muted text-muted-foreground" },
-  9: { label: "Verified", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
-  10: { label: "Deleted", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
+  9: { label: "Verified", color: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
+  10: { label: "Deleted", color: "bg-red-500/10 text-red-400 border border-red-500/20" },
   11: { label: "Queued", color: "bg-muted text-muted-foreground" },
 };
 
 const DTMF_MAP: Record<number, { label: string; color: string }> = {
-  1: { label: "Confirmed", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
-  2: { label: "Cancelled", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" },
-  3: { label: "Callback", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" },
+  1: { label: "Confirmed", color: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
+  2: { label: "Cancelled", color: "bg-red-500/10 text-red-400 border border-red-500/20" },
+  3: { label: "Callback", color: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
 };
 
 interface SettingsData {
@@ -656,7 +656,7 @@ export default function RoboCallPage() {
             </CardTitle>
             <div className="flex items-center gap-2 flex-wrap">
               {robocallDisconnected ? (
-                <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300" data-testid="badge-connection-status">
+                <Badge className="bg-red-500/10 text-red-400 border border-red-500/20" data-testid="badge-connection-status">
                   <XCircle className="w-3 h-3 mr-1" /> Disconnected
                 </Badge>
               ) : !apiKey || !email ? (
@@ -664,7 +664,7 @@ export default function RoboCallPage() {
                   Not Configured
                 </Badge>
               ) : (
-                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" data-testid="badge-connection-status">
+                <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-testid="badge-connection-status">
                   <CheckCircle2 className="w-3 h-3 mr-1" /> Connected
                 </Badge>
               )}
@@ -763,7 +763,7 @@ export default function RoboCallPage() {
               Save
             </Button>
             {keyVerified && (
-              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" data-testid="badge-key-verified">
+              <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-testid="badge-key-verified">
                 <CheckCircle2 className="w-3 h-3 mr-1" /> Verified
               </Badge>
             )}
@@ -995,11 +995,11 @@ export default function RoboCallPage() {
                             variant="secondary"
                             className={
                               call.status === "Error"
-                                ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
+                                ? "bg-red-500/10 text-red-400 border border-red-500/20"
                                 : call.status === "Answered"
-                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                                 : call.status === "Initiated"
-                                ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
+                                ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
                                 : ""
                             }
                             data-testid={`badge-call-status-${i}`}

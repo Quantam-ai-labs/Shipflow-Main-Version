@@ -45,20 +45,20 @@ const SEVERITY_CONFIG = {
   critical: {
     icon: AlertTriangle,
     borderColor: "border-l-red-500",
-    bgColor: "bg-red-50 dark:bg-red-950/20",
-    iconColor: "text-red-500",
+    bgColor: "bg-red-500/[0.08]",
+    iconColor: "text-red-400",
   },
   warning: {
     icon: AlertCircle,
     borderColor: "border-l-amber-500",
-    bgColor: "bg-amber-50 dark:bg-amber-950/20",
-    iconColor: "text-amber-500",
+    bgColor: "bg-amber-500/[0.08]",
+    iconColor: "text-amber-400",
   },
   info: {
     icon: Info,
     borderColor: "border-l-blue-500",
-    bgColor: "bg-blue-50 dark:bg-blue-950/20",
-    iconColor: "text-blue-500",
+    bgColor: "bg-blue-500/[0.08]",
+    iconColor: "text-blue-400",
   },
 };
 

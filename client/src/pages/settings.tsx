@@ -104,8 +104,8 @@ interface HistoryNotification {
 }
 
 const CATEGORY_BADGE: Record<string, { label: string; className: string }> = {
-  confirmation: { label: "Confirmation", className: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-  chat:         { label: "Chat",         className: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
+  confirmation: { label: "Confirmation", className: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
+  chat:         { label: "Chat",         className: "bg-amber-500/10 text-amber-400 border border-amber-500/20" },
   other:        { label: "Other",        className: "bg-muted text-muted-foreground" },
 };
 

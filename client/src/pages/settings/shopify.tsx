@@ -961,8 +961,8 @@ export default function ShopifySettings() {
             </div>
 
             {!useManualAuth && (
-              <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
+              <div className="p-3 bg-blue-500/10 rounded-md border border-blue-500/20">
+                <p className="text-sm text-blue-300">
                   You'll be redirected to Shopify to authorize 1SOL.AI. This uses the standard Shopify app install flow.
                 </p>
               </div>

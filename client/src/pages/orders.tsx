@@ -51,19 +51,19 @@ import { DateRange } from "react-day-picker";
 import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
 
 const STATUS_COLORS: Record<string, string> = {
-  'BOOKED': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-  'PICKED_UP': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-  'ARRIVED_AT_ORIGIN': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-  'IN_TRANSIT': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-  'ARRIVED_AT_DESTINATION': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-  'OUT_FOR_DELIVERY': "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
-  'DELIVERY_ATTEMPTED': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-  'DELIVERED': "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-  'DELIVERY_FAILED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  'RETURNED_TO_SHIPPER': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  'READY_FOR_RETURN': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-  'RETURN_IN_TRANSIT': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  'BOOKED': "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+  'PICKED_UP': "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20",
+  'ARRIVED_AT_ORIGIN': "bg-violet-500/10 text-violet-400 border border-violet-500/20",
+  'IN_TRANSIT': "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20",
+  'ARRIVED_AT_DESTINATION': "bg-violet-500/10 text-violet-400 border border-violet-500/20",
+  'OUT_FOR_DELIVERY': "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+  'DELIVERY_ATTEMPTED': "bg-orange-500/10 text-orange-400 border border-orange-500/20",
+  'DELIVERED': "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+  'DELIVERY_FAILED': "bg-red-500/10 text-red-400 border border-red-500/20",
+  'RETURNED_TO_SHIPPER': "bg-red-500/10 text-red-400 border border-red-500/20",
+  'READY_FOR_RETURN': "bg-orange-500/10 text-orange-400 border border-orange-500/20",
+  'RETURN_IN_TRANSIT': "bg-red-500/10 text-red-400 border border-red-500/20",
+  'CANCELLED': "bg-red-500/10 text-red-400 border border-red-500/20",
   'Unfulfilled': "bg-muted text-muted-foreground",
 };
 
@@ -387,11 +387,11 @@ export default function Orders() {
   return (
     <div className="h-full flex flex-col">
       {showMissingDataWarning && (
-        <div className="mx-4 mt-4 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-3" data-testid="banner-missing-customer-data">
-          <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+        <div className="mx-4 mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-3" data-testid="banner-missing-customer-data">
+          <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
           <div className="text-sm">
-            <span className="font-medium text-amber-800 dark:text-amber-200">Customer data missing for some orders.</span>{" "}
-            <Link href="/settings/shopify" className="underline text-amber-700 dark:text-amber-300">Update Shopify permissions</Link> and re-sync.
+            <span className="font-medium text-amber-300">Customer data missing for some orders.</span>{" "}
+            <Link href="/settings/shopify" className="underline text-amber-400">Update Shopify permissions</Link> and re-sync.
           </div>
         </div>
       )}

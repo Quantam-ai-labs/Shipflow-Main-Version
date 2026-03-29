@@ -225,12 +225,12 @@ export default function MarketingSettings() {
           {statusLoading ? (
             <Skeleton className="h-5 w-20" />
           ) : oauthStatus?.connected ? (
-            <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" data-testid="badge-connection-status">
+            <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-testid="badge-connection-status">
               <CheckCircle2 className="w-3 h-3 mr-1" />
               Connected
             </Badge>
           ) : (
-            <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" data-testid="badge-connection-status">
+            <Badge className="bg-red-500/10 text-red-400 border border-red-500/20" data-testid="badge-connection-status">
               <XCircle className="w-3 h-3 mr-1" />
               Not Connected
             </Badge>

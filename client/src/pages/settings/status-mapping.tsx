@@ -57,11 +57,11 @@ const WORKFLOW_STAGE_LABELS: Record<string, string> = {
 
 
 const WORKFLOW_STAGE_COLORS: Record<string, string> = {
-  BOOKED: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  FULFILLED: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
-  DELIVERED: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  RETURN: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-  CANCELLED: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+  BOOKED: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+  FULFILLED: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+  DELIVERED: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+  RETURN: "bg-orange-500/10 text-orange-400 border border-orange-500/20",
+  CANCELLED: "bg-red-500/10 text-red-400 border border-red-500/20",
 };
 
 
@@ -360,7 +360,7 @@ function RawStatusMappingSection() {
                       return (
                         <div
                           key={key}
-                          className={`grid grid-cols-1 lg:grid-cols-[2fr_3rem_1.6fr_auto] gap-2 px-3 py-2 items-center text-sm ${dirty ? "bg-amber-50/50 dark:bg-amber-900/10" : ""} ${isSeededOnly && !dirty ? "opacity-50" : ""}`}
+                          className={`grid grid-cols-1 lg:grid-cols-[2fr_3rem_1.6fr_auto] gap-2 px-3 py-2 items-center text-sm ${dirty ? "bg-amber-500/[0.06]" : ""} ${isSeededOnly && !dirty ? "opacity-50" : ""}`}
                           data-testid={`raw-status-row-${key}`}
                         >
                           <div className="flex items-center gap-2 flex-wrap">

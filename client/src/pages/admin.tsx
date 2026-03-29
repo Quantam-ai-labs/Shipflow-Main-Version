@@ -855,7 +855,7 @@ function PeekTeamSection({ merchantId, users: initialUsers }: { merchantId: stri
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium truncate">{m.firstName} {m.lastName}</p>
-                    {m.isMerchantOwner && <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">Owner</Badge>}
+                    {m.isMerchantOwner && <Badge className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20">Owner</Badge>}
                     <Badge variant="outline" className="text-xs capitalize">{m.role}</Badge>
                     {m.userIsActive === false && <Badge variant="destructive" className="text-xs">Blocked</Badge>}
                   </div>
@@ -1501,8 +1501,8 @@ function InlineEditField({ label, fieldKey, value, secret, onSave, isPending }: 
     <div className="space-y-1.5">
       <div className="flex items-center gap-2">
         <Label className="text-sm font-medium">{label}</Label>
-        {configured && !editing && <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800">Configured</Badge>}
-        {!configured && !editing && <Badge variant="outline" className="text-xs bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800">Required</Badge>}
+        {configured && !editing && <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-400 border-emerald-500/20">Configured</Badge>}
+        {!configured && !editing && <Badge variant="outline" className="text-xs bg-orange-500/10 text-orange-400 border-orange-500/20">Required</Badge>}
       </div>
       {editing ? (
         <div className="flex items-center gap-2">
@@ -1635,14 +1635,14 @@ function MetaAppTab() {
               { perm: "ads_read", note: "Advanced Access", critical: true },
               { perm: "read_insights", note: "Advanced Access", critical: true },
             ].map(({ perm, note, critical }) => (
-              <div key={perm} className={`flex items-center justify-between p-2 rounded-lg border text-sm ${critical ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" : "bg-muted/30"}`}>
+              <div key={perm} className={`flex items-center justify-between p-2 rounded-lg border text-sm ${critical ? "bg-amber-500/[0.08] border-amber-500/20" : "bg-muted/30"}`}>
                 <span className="font-mono text-xs">{perm}</span>
                 <Badge variant={critical ? "default" : "outline"} className={`text-xs ${critical ? "bg-amber-600" : ""}`}>{note}</Badge>
               </div>
             ))}
           </div>
-          <div className="p-3 border border-amber-200 rounded-lg bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
-            <p className="text-xs text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
+          <div className="p-3 border border-amber-500/20 rounded-lg bg-amber-500/10">
+            <p className="text-xs text-amber-400 flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
               <strong>public_profile, ads_management, ads_read, and read_insights MUST have Advanced Access</strong> — without public_profile, Embedded Signup will silently fail. Without ads permissions, Ad Manager and Ads Launcher won't work. Submit for Advanced Access via App Review.
             </p>
@@ -1706,8 +1706,8 @@ function MetaAppTab() {
             <li>Submit for <strong>App Review</strong> if you need Advanced Access for any permissions</li>
             <li>Add a <strong>business verification</strong> in Settings → Basic if required</li>
           </ul>
-          <div className="p-3 border border-blue-200 rounded-lg bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800">
-            <p className="text-xs text-blue-800 dark:text-blue-400 flex items-center gap-1.5">
+          <div className="p-3 border border-blue-500/20 rounded-lg bg-blue-500/10">
+            <p className="text-xs text-blue-300 flex items-center gap-1.5">
               <Info className="w-3.5 h-3.5 shrink-0" />
               Once live, merchants can connect their WhatsApp Business Accounts through the Embedded Signup flow in their Settings page. Each merchant manages their own WhatsApp number and access token.
             </p>

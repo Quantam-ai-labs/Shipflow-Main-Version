@@ -1272,16 +1272,16 @@ export default function CouriersSettings() {
               </div>
 
               {selectedCourier === 'leopards' && (
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <p className="text-xs text-amber-400">
                     Find your API Key and Password in your Leopards account under <strong>API Settings</strong> &rarr; <strong>API Management</strong>.
                   </p>
                 </div>
               )}
 
               {selectedCourier === 'postex' && (
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <p className="text-xs text-amber-400">
                     Your API Token can be found in your PostEx merchant dashboard under <strong>Integration Settings</strong>.
                   </p>
                 </div>

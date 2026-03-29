@@ -716,9 +716,9 @@ function TransactionDetailDialog({ txnId, open, onClose }: { txnId: string | nul
             </div>
 
             {data.reversedAt && (
-              <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-md p-3">
-                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">This transaction has been reversed</p>
-                <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">Reason: {data.reversalReason}</p>
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-md p-3">
+                <p className="text-sm font-medium text-amber-300">This transaction has been reversed</p>
+                <p className="text-xs text-amber-400 mt-1">Reason: {data.reversalReason}</p>
               </div>
             )}
 

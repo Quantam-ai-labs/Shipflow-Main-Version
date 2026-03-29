@@ -682,7 +682,7 @@ export function AppSidebar() {
             <button className="flex items-center gap-2 w-full p-2 rounded-md hover-elevate transition-colors dark:hover:bg-white/[0.05]" data-testid="nav-user-menu">
               <Avatar className="h-7 w-7">
                 <AvatarImage src={undefined} />
-                <AvatarFallback className="text-[10px] bg-primary/20 text-primary dark:bg-blue-900/50 dark:text-blue-300">{getUserInitials()}</AvatarFallback>
+                <AvatarFallback className="text-[10px] bg-blue-500/20 text-blue-300">{getUserInitials()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 text-left min-w-0">
                 <p className="text-sm font-medium truncate">{getUserDisplayName()}</p>

@@ -717,9 +717,9 @@ export default function MetaMediaLibrary() {
                 </div>
               </div>
               {uploadValidationErrors.length > 0 && (
-                <div className="space-y-1 p-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded">
+                <div className="space-y-1 p-2 bg-red-500/10 border border-red-500/20 rounded">
                   {uploadValidationErrors.map((err, i) => (
-                    <p key={i} className="text-xs text-red-600 dark:text-red-400">{err}</p>
+                    <p key={i} className="text-xs text-red-400">{err}</p>
                   ))}
                 </div>
               )}

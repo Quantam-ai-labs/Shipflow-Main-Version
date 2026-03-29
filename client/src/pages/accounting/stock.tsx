@@ -453,7 +453,7 @@ function StockReceiptsTab() {
             )}
 
             {paymentType === "CREDIT" && (
-              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md p-3 text-sm text-blue-800 dark:text-blue-200" data-testid="text-credit-info">
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-md p-3 text-sm text-blue-300" data-testid="text-credit-info">
                 This purchase will be added to the supplier's payable balance. Pay the supplier later via "Money Out".
               </div>
             )}

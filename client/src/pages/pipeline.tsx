@@ -280,25 +280,25 @@ function truncateStatus(status: string, wordCount: number = 3): string {
 
 function getStatusBadgeColor(workflowStatus: string | null | undefined): string {
   switch (workflowStatus) {
-    case 'BOOKED': return "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300";
-    case 'FULFILLED': return "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300";
-    case 'DELIVERED': return "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300";
-    case 'RETURN': return "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300";
-    case 'CANCELLED': return "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300";
-    default: return "bg-muted text-muted-foreground";
+    case 'BOOKED': return "bg-blue-500/10 text-blue-400 border border-blue-500/20";
+    case 'FULFILLED': return "bg-teal-500/10 text-teal-400 border border-teal-500/20";
+    case 'DELIVERED': return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+    case 'RETURN': return "bg-red-500/10 text-red-400 border border-red-500/20";
+    case 'CANCELLED': return "bg-red-500/10 text-red-400 border border-red-500/20";
+    default: return "bg-muted text-muted-foreground border border-border";
   }
 }
 
 const WORKFLOW_STATUS_COLORS: Record<string, string> = {
-  'NEW': "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-  'PENDING': "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
-  'HOLD': "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-  'READY_TO_SHIP': "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300",
-  'BOOKED': "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-  'FULFILLED': "bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300",
-  'DELIVERED': "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-  'RETURN': "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-  'CANCELLED': "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  'NEW': "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+  'PENDING': "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+  'HOLD': "bg-white/10 text-white/60 border border-white/10",
+  'READY_TO_SHIP': "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20",
+  'BOOKED': "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+  'FULFILLED': "bg-teal-500/10 text-teal-400 border border-teal-500/20",
+  'DELIVERED': "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+  'RETURN': "bg-red-500/10 text-red-400 border border-red-500/20",
+  'CANCELLED': "bg-red-500/10 text-red-400 border border-red-500/20",
 };
 
 const WORKFLOW_STATUS_BORDER: Record<string, string> = {
@@ -328,9 +328,9 @@ const DEFAULT_TAG_CONFIG = { confirm: "Robo-Confirm", pending: "Robo-Pending", c
 function getRoboTagStyle(tag: string, tagConfig?: { confirm: string; pending: string; cancel: string } | null): string | null {
   const config = tagConfig || DEFAULT_TAG_CONFIG;
   const lowerTag = tag.toLowerCase();
-  if (lowerTag === config.confirm.toLowerCase()) return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
-  if (lowerTag === config.pending.toLowerCase()) return 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300';
-  if (lowerTag === config.cancel.toLowerCase()) return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
+  if (lowerTag === config.confirm.toLowerCase()) return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+  if (lowerTag === config.pending.toLowerCase()) return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
+  if (lowerTag === config.cancel.toLowerCase()) return 'bg-red-500/10 text-red-400 border border-red-500/20';
   return null;
 }
 
@@ -1398,7 +1398,7 @@ export default function Pipeline() {
 
       {/* Advanced Filter Panel — All Orders only */}
       {activeTab === "ALL" && showAdvancedFilters && (
-        <div className="px-4 py-3 border-b bg-muted/30 space-y-3" data-testid="advanced-filter-panel">
+        <div className="px-4 py-3 border-b border-border/50 bg-card/60 space-y-3" data-testid="advanced-filter-panel">
           <div className="flex flex-wrap gap-3 items-end">
             {/* Tag filter */}
             <div className="flex flex-col gap-1">
@@ -1578,17 +1578,17 @@ export default function Pipeline() {
       )}
       {/* Bulk Actions Bar */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/5 border-b" data-testid="bulk-actions-bar">
-          <span className="text-sm font-medium">{selectedIds.size} selected</span>
-          <div className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-white/[0.05] border-b border-white/[0.08]" data-testid="bulk-actions-bar">
+          <span className="text-sm font-medium text-white/90">{selectedIds.size} selected</span>
+          <div className="h-4 w-px bg-white/20" />
 
           {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "ALL") && (
-            <Button size="sm" onClick={() => handleBulkAction("confirm")} disabled={isPending} data-testid="bulk-confirm">
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white border-0" onClick={() => handleBulkAction("confirm")} disabled={isPending} data-testid="bulk-confirm">
               <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />Confirm
             </Button>
           )}
           {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "HOLD" || activeTab === "READY_TO_SHIP" || activeTab === "ALL") && (
-            <Button size="sm" variant="destructive" onClick={() => handleBulkAction("cancel")} disabled={isPending} data-testid="bulk-cancel">
+            <Button size="sm" variant="outline" className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300" onClick={() => handleBulkAction("cancel")} disabled={isPending} data-testid="bulk-cancel">
               <XCircle className="w-3.5 h-3.5 mr-1.5" />Cancel
             </Button>
           )}
@@ -1802,9 +1802,9 @@ export default function Pipeline() {
       )}
       {/* Expired Holds Banner */}
       {activeTab === "HOLD" && expiredHolds > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800" data-testid="banner-expired-holds">
-          <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-          <span className="text-sm text-red-700 dark:text-red-300 font-medium">
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-red-500/10 border-b border-red-500/20" data-testid="banner-expired-holds">
+          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+          <span className="text-sm text-red-300 font-medium">
             {expiredHolds} hold{expiredHolds > 1 ? "s" : ""} expired - action required
           </span>
         </div>
@@ -1891,8 +1891,8 @@ export default function Pipeline() {
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-muted sticky top-0 z-10">
-              <tr className="border-b">
+            <thead className="bg-card sticky top-0 z-10 border-b border-border/60">
+              <tr>
                 {activeTab !== "CANCELLED" && activeTab !== "DELIVERED" && activeTab !== "RETURN" && (
                   <th className="w-10 px-3 py-2 text-left">
                     <Checkbox
@@ -1903,89 +1903,93 @@ export default function Pipeline() {
                   </th>
                 )}
                 {activeTab === "ALL" ? (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
-                    <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "orderNumber") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("orderNumber"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-order-number">
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                    <button className="flex items-center gap-1 hover:text-white/70 transition-colors" onClick={() => { if (allSortBy === "orderNumber") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("orderNumber"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-order-number">
                       Order
                       {allSortBy === "orderNumber" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
                     </button>
                   </th>
                 ) : (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Order</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">Order</th>
                 )}
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Customer</th>
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">City</th>
-                <th className="px-2 py-2.5 text-center font-medium text-muted-foreground w-[40px]" data-testid="header-history">#</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">Customer</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40 hidden md:table-cell">City</th>
+                <th className="px-2 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-white/40 w-[40px]" data-testid="header-history">#</th>
                 {(activeTab === "NEW" || activeTab === "PENDING" || activeTab === "ALL" || activeTab === "READY_TO_SHIP" || activeTab === "HOLD") && (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Address</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">Address</th>
                 )}
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Products</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">Products</th>
                 {activeTab === "ALL" ? (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
-                    <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "totalAmount") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("totalAmount"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-amount">
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                    <button className="flex items-center gap-1 hover:text-white/70 transition-colors" onClick={() => { if (allSortBy === "totalAmount") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("totalAmount"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-amount">
                       Amount (PKR)
                       {allSortBy === "totalAmount" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
                     </button>
                   </th>
                 ) : (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Amount (PKR)</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">Amount (PKR)</th>
                 )}
                 {activeTab === "ALL" ? (
-                  <th className="px-3 py-2.5 text-center font-medium text-muted-foreground hidden lg:table-cell w-[40px]">
-                    <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "totalQuantity") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("totalQuantity"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-items">
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-white/40 hidden lg:table-cell w-[40px]">
+                    <button className="flex items-center gap-1 hover:text-white/70 transition-colors" onClick={() => { if (allSortBy === "totalQuantity") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("totalQuantity"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-items">
                       Items
                       {allSortBy === "totalQuantity" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
                     </button>
                   </th>
                 ) : (
-                  <th className="px-3 py-2.5 text-center font-medium text-muted-foreground hidden lg:table-cell w-[40px]">Items</th>
+                  <th className="px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-white/40 hidden lg:table-cell w-[40px]">Items</th>
                 )}
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell max-w-[100px]" data-testid="header-tags">Tags</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40 hidden md:table-cell max-w-[100px]" data-testid="header-tags">Tags</th>
                 {activeTab === "ALL" && (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground" data-testid="header-workflow-status">
-                    <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "workflowStatus") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("workflowStatus"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-status">
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40" data-testid="header-workflow-status">
+                    <button className="flex items-center gap-1 hover:text-white/70 transition-colors" onClick={() => { if (allSortBy === "workflowStatus") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("workflowStatus"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-status">
                       Status
                       {allSortBy === "workflowStatus" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
                     </button>
                   </th>
                 )}
                 {activeTab === "PENDING" && (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">Reason</th>
                 )}
                 {activeTab === "HOLD" && (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Hold Until</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">Hold Until</th>
                 )}
                 {(activeTab === "BOOKED" || activeTab === "FULFILLED" || activeTab === "DELIVERED" || activeTab === "RETURN" || activeTab === "ALL") && (
                   <>
                     {activeTab === "ALL" ? (
-                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">
-                        <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => { if (allSortBy === "courierName") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("courierName"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-courier">
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">
+                        <button className="flex items-center gap-1 hover:text-white/70 transition-colors" onClick={() => { if (allSortBy === "courierName") setAllSortDir(d => d === "asc" ? "desc" : "asc"); else { setAllSortBy("courierName"); setAllSortDir("desc"); } setPage(1); }} data-testid="sort-courier">
                           Courier
                           {allSortBy === "courierName" ? (allSortDir === "asc" ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />) : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />}
                         </button>
                       </th>
                     ) : (
-                      <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Courier</th>
+                      <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">Courier</th>
                     )}
-                    <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Courier Status</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">Courier Status</th>
                   </>
                 )}
                 {activeTab === "CANCELLED" && (
-                  <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Reason</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40">Reason</th>
                 )}
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground" data-testid="header-remark">Remark</th>
-                <th className="px-3 py-2 text-right font-medium text-muted-foreground">Actions</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-white/40" data-testid="header-remark">Remark</th>
+                <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-white/40">Actions</th>
               </tr>
             </thead>
             <tbody>
               {orders.map((order, idx) => (
                 <tr
                   key={order.id}
-                  className={`border-b border-l-[3px] transition-colors hover-elevate ${
-                    WORKFLOW_STATUS_BORDER[order.workflowStatus || ""] || "border-l-border"
+                  className={`border-b border-l-[3px] transition-colors hover:bg-blue-500/[0.06] ${
+                    selectedIds.has(order.id)
+                      ? "bg-blue-500/10 border-l-blue-500"
+                      : WORKFLOW_STATUS_BORDER[order.workflowStatus || ""] || "border-l-border/30"
                   } ${
-                    selectedIds.has(order.id) ? "bg-primary/5" :
-                    activeTab === "HOLD" && order.holdUntil && isPast(new Date(order.holdUntil)) ? "bg-red-50/50 dark:bg-red-950/30" :
-                    idx % 2 === 1 ? "bg-muted/20" : ""
+                    !selectedIds.has(order.id) && activeTab === "HOLD" && order.holdUntil && isPast(new Date(order.holdUntil))
+                      ? "bg-red-500/[0.08]"
+                      : !selectedIds.has(order.id) && idx % 2 === 1
+                      ? "bg-white/[0.02]"
+                      : ""
                   }`}
                   data-testid={`order-row-${order.id}`}
                 >
@@ -2007,28 +2011,28 @@ export default function Pipeline() {
                         {String(order.orderNumber || '').replace(/^#/, '')}
                       </Link>
                       {order.orderSource === "shopify_draft_order" && (
-                        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order" data-testid={`badge-draft-${order.id}`}>
-                          <PenLine className="w-2.5 h-2.5 text-green-700 dark:text-green-300" />
+                        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-500/10 border border-emerald-500/20" title="Custom Order" data-testid={`badge-draft-${order.id}`}>
+                          <PenLine className="w-2.5 h-2.5 text-emerald-400" />
                         </span>
                       )}
                       {(order as any).confirmationSource && (
-                        <span className={`inline-flex items-center justify-center px-1 py-0.5 rounded text-[10px] font-medium leading-none ${
-                          (order as any).confirmationSource === "whatsapp" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
-                          (order as any).confirmationSource === "robocall" ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" :
-                          (order as any).confirmationSource === "manual" ? "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300" :
-                          "bg-muted text-muted-foreground"
+                        <span className={`inline-flex items-center justify-center px-1 py-0.5 rounded text-[10px] font-medium leading-none border ${
+                          (order as any).confirmationSource === "whatsapp" ? "bg-green-500/10 text-green-400 border-green-500/20" :
+                          (order as any).confirmationSource === "robocall" ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
+                          (order as any).confirmationSource === "manual" ? "bg-violet-500/10 text-violet-400 border-violet-500/20" :
+                          "bg-muted text-muted-foreground border-border"
                         }`} title={`Confirmed via ${(order as any).confirmationSource}`} data-testid={`badge-source-${order.id}`}>
                           {(order as any).confirmationSource === "whatsapp" ? "WA" : (order as any).confirmationSource === "robocall" ? "RC" : "M"}
                         </span>
                       )}
                       {activeTab === "NEW" && (order as any).waAttemptCount > 0 && !(order as any).waNextAttemptAt && !(order as any).waResponseAt && !(order as any).confirmationSource && (
-                        <span className="inline-flex items-center justify-center px-1 py-0.5 rounded text-[10px] font-medium leading-none bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300" title="RoboCall phase — all WA attempts exhausted" data-testid={`badge-robocall-phase-${order.id}`}>
+                        <span className="inline-flex items-center justify-center px-1 py-0.5 rounded text-[10px] font-medium leading-none bg-blue-500/10 text-blue-400 border border-blue-500/20" title="RoboCall phase — all WA attempts exhausted" data-testid={`badge-robocall-phase-${order.id}`}>
                           RC
                         </span>
                       )}
                       {(order as any).conflictDetected && (
-                        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-900 border border-orange-300 dark:border-orange-700" title="Conflict Detected" data-testid={`badge-conflict-${order.id}`}>
-                          <AlertTriangle className="w-2.5 h-2.5 text-orange-700 dark:text-orange-300" />
+                        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-amber-500/10 border border-amber-500/20" title="Conflict Detected" data-testid={`badge-conflict-${order.id}`}>
+                          <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
                         </span>
                       )}
                       {(order as any).confirmationLocked && (
@@ -2100,10 +2104,10 @@ export default function Pipeline() {
                       if (count <= 1) return <span className="text-[11px] text-muted-foreground">-</span>;
                       const color = getProximityColor(order.orderDate, hist?.orderDates || []);
                       const colorClasses = color === "red"
-                        ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 border-red-200 dark:border-red-700"
+                        ? "bg-red-500/10 text-red-400 border-red-500/20"
                         : color === "blue"
-                        ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-700"
-                        : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-700";
+                        ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                        : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
                       return (
                         <button
                           className="cursor-pointer hover:opacity-80"
@@ -2401,7 +2405,7 @@ export default function Pipeline() {
       </div>
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between px-4 py-1.5 border-t bg-background">
+        <div className="flex items-center justify-between px-4 py-1.5 border-t border-border/60 bg-card/40">
           <div className="text-xs text-muted-foreground" data-testid="text-total-orders">
             {shipmentSubFilter !== "all" ? `${orders.length} of ${total}` : total} orders
           </div>
@@ -2613,7 +2617,7 @@ export default function Pipeline() {
                           return (
                             <tr
                               key={order.orderId}
-                              className={`${hasError ? "bg-red-50/50 dark:bg-red-950/20" : ""} ${!isChecked && isValid ? "opacity-40" : ""}`}
+                              className={`${hasError ? "bg-red-500/[0.08]" : ""} ${!isChecked && isValid ? "opacity-40" : ""}`}
                               data-testid={`preview-row-${order.orderId}`}
                             >
                               <td className="px-2 py-1 border border-border">
@@ -2771,9 +2775,9 @@ export default function Pipeline() {
                     </div>
                     <div className="space-y-0.5">
                       {bookingConfirmModal.preview.alreadyBooked.map((ab: any) => (
-                        <div key={ab.orderId} className="flex items-center justify-between gap-2 text-[11px] px-2 py-1 rounded bg-blue-50 dark:bg-blue-950/30" data-testid={`preview-booked-${ab.orderId}`}>
+                        <div key={ab.orderId} className="flex items-center justify-between gap-2 text-[11px] px-2 py-1 rounded bg-blue-500/10" data-testid={`preview-booked-${ab.orderId}`}>
                           <span className="font-medium">{String(ab.orderNumber || '').replace(/^#/, '')}</span>
-                          <span className="font-mono text-blue-700 dark:text-blue-400">{ab.trackingNumber}</span>
+                          <span className="font-mono text-blue-400">{ab.trackingNumber}</span>
                         </div>
                       ))}
                     </div>
@@ -3008,10 +3012,10 @@ export default function Pipeline() {
                   </div>
                   <div className="space-y-1">
                     {bookingResultsModal.results.results.filter((r: any) => r.success).map((r: any) => (
-                      <div key={r.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-green-50 dark:bg-green-950/30" data-testid={`result-success-${r.orderId}`}>
+                      <div key={r.orderId} className="flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded bg-emerald-500/10" data-testid={`result-success-${r.orderId}`}>
                         <span className="font-medium">{String(r.orderNumber || '').replace(/^#/, '')}</span>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-green-700 dark:text-green-400">{r.trackingNumber}</span>
+                          <span className="font-mono text-emerald-400">{r.trackingNumber}</span>
                           {r.orderId && (
                             <a href={`/api/print/native-slip/${r.orderId}.pdf`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                               <ExternalLink className="w-3 h-3" />
@@ -3031,9 +3035,9 @@ export default function Pipeline() {
                   </div>
                   <div className="space-y-1.5">
                     {bookingResultsModal.results.results.filter((r: any) => !r.success).map((r: any) => (
-                      <div key={r.orderId} className="text-xs px-3 py-2 rounded bg-red-50 dark:bg-red-950/30" data-testid={`result-failed-${r.orderId}`}>
+                      <div key={r.orderId} className="text-xs px-3 py-2 rounded bg-red-500/10" data-testid={`result-failed-${r.orderId}`}>
                         <div className="font-medium mb-1">{String(r.orderNumber || '').replace(/^#/, '')}</div>
-                        <div className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words leading-relaxed">{r.error}</div>
+                        <div className="text-red-400 whitespace-pre-wrap break-words leading-relaxed">{r.error}</div>
                       </div>
                     ))}
                   </div>
@@ -3445,9 +3449,9 @@ export default function Pipeline() {
                           {String(o.orderNumber || '').replace(/^#/, '')}
                         </Link>
                         <Badge className={`text-[10px] px-1.5 py-0 ${
-                          o.workflowStatus === "DELIVERED" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
-                          o.workflowStatus === "CANCELLED" ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" :
-                          o.workflowStatus === "RETURN" ? "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300" :
+                          o.workflowStatus === "DELIVERED" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                          o.workflowStatus === "CANCELLED" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
+                          o.workflowStatus === "RETURN" ? "bg-orange-500/10 text-orange-400 border border-orange-500/20" :
                           "bg-muted text-muted-foreground"
                         }`}>
                           {o.workflowStatus}

@@ -475,7 +475,7 @@ export default function SettingsWhatsApp() {
       </div>
 
       {!isLoading && !data?.connected && (
-        <Card className="border-2 border-dashed border-green-500/30 bg-green-50/50 dark:bg-green-950/10">
+        <Card className="border-2 border-dashed border-green-500/30 bg-green-500/[0.04]">
           <CardContent className="pt-6">
             <div className="flex flex-col items-center text-center space-y-4">
               <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center">
@@ -530,7 +530,7 @@ export default function SettingsWhatsApp() {
             </div>
 
             {(regStatus === "pin_required" || regStatus === "2fa_required" || regStatus === "failed") && (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/10 p-4 space-y-3" data-testid="section-registration-status">
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] p-4 space-y-3" data-testid="section-registration-status">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
                   <div>
@@ -571,9 +571,9 @@ export default function SettingsWhatsApp() {
             )}
 
             {regStatus === "success" && (
-              <div className="rounded-lg border border-green-500/30 bg-green-50/50 dark:bg-green-950/10 p-3 flex items-center gap-2" data-testid="section-registration-success">
+              <div className="rounded-lg border border-green-500/30 bg-green-500/[0.06] p-3 flex items-center gap-2" data-testid="section-registration-success">
                 <Check className="w-4 h-4 text-green-500" />
-                <p className="text-sm text-green-700 dark:text-green-400">Phone number registered and ready to send messages</p>
+                <p className="text-sm text-green-400">Phone number registered and ready to send messages</p>
               </div>
             )}
 
@@ -1075,8 +1075,8 @@ function AiAutoReplyCard() {
             </Button>
           </div>
           {testReply && (
-            <div className="rounded-lg border bg-green-50 dark:bg-green-950/20 p-3" data-testid="text-ai-test-reply">
-              <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-1">AI would reply:</p>
+            <div className="rounded-lg border border-green-500/20 bg-green-500/[0.06] p-3" data-testid="text-ai-test-reply">
+              <p className="text-xs font-medium text-green-400 mb-1">AI would reply:</p>
               <p className="text-sm">{testReply}</p>
             </div>
           )}

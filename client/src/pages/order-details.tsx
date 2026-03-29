@@ -88,14 +88,14 @@ interface OrderDetails extends Order {
 function getWorkflowBadge(workflowStatus: string | null) {
   const status = workflowStatus || "NEW";
   const config: Record<string, { bg: string; label: string }> = {
-    NEW: { bg: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "New" },
-    PENDING: { bg: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300", label: "Confirmation Pending" },
-    HOLD: { bg: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Conflicting" },
-    READY_TO_SHIP: { bg: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300", label: "Ready to Ship" },
-    BOOKED: { bg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300", label: "Booked" },
-    FULFILLED: { bg: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "Fulfilled" },
-    DELIVERED: { bg: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "Delivered" },
-    RETURN: { bg: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300", label: "Return" },
+    NEW: { bg: "bg-blue-500/10 text-blue-400 border border-blue-500/20", label: "New" },
+    PENDING: { bg: "bg-amber-500/10 text-amber-400 border border-amber-500/20", label: "Confirmation Pending" },
+    HOLD: { bg: "bg-white/10 text-white/60 border border-white/10", label: "Conflicting" },
+    READY_TO_SHIP: { bg: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", label: "Ready to Ship" },
+    BOOKED: { bg: "bg-blue-500/10 text-blue-400 border border-blue-500/20", label: "Booked" },
+    FULFILLED: { bg: "bg-teal-500/10 text-teal-400 border border-teal-500/20", label: "Fulfilled" },
+    DELIVERED: { bg: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", label: "Delivered" },
+    RETURN: { bg: "bg-red-500/10 text-red-400 border border-red-500/20", label: "Return" },
     CANCELLED: { bg: "bg-muted text-muted-foreground", label: "Cancelled" },
   };
   const c = config[status] || config.NEW;
@@ -104,18 +104,18 @@ function getWorkflowBadge(workflowStatus: string | null) {
 
 function getShipmentStatusColor(status: string): string {
   const colorMap: Record<string, string> = {
-    BOOKED: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-    ARRIVED_AT_ORIGIN: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-    PICKED_UP: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-    IN_TRANSIT: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-    ARRIVED_AT_DESTINATION: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-    OUT_FOR_DELIVERY: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
-    DELIVERY_ATTEMPTED: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-    DELIVERED: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    DELIVERY_FAILED: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-    READY_FOR_RETURN: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-    RETURN_IN_TRANSIT: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
-    RETURNED_TO_SHIPPER: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
+    BOOKED: "bg-blue-500/10 text-blue-400",
+    ARRIVED_AT_ORIGIN: "bg-indigo-500/10 text-indigo-400",
+    PICKED_UP: "bg-indigo-500/10 text-indigo-400",
+    IN_TRANSIT: "bg-violet-500/10 text-violet-400",
+    ARRIVED_AT_DESTINATION: "bg-violet-500/10 text-violet-400",
+    OUT_FOR_DELIVERY: "bg-amber-500/10 text-amber-400",
+    DELIVERY_ATTEMPTED: "bg-orange-500/10 text-orange-400",
+    DELIVERED: "bg-emerald-500/10 text-emerald-400",
+    DELIVERY_FAILED: "bg-red-500/10 text-red-400",
+    READY_FOR_RETURN: "bg-orange-500/10 text-orange-400",
+    RETURN_IN_TRANSIT: "bg-rose-500/10 text-rose-400",
+    RETURNED_TO_SHIPPER: "bg-rose-500/10 text-rose-400",
     CANCELLED: "bg-muted text-muted-foreground",
   };
   return colorMap[status] || "bg-muted text-muted-foreground";
@@ -158,18 +158,18 @@ interface TrackingHistoryData {
 }
 
 const PIPELINE_STAGES = [
-  { key: "BOOKED", label: "Booked", icon: Package, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-600", lightBg: "bg-blue-100 dark:bg-blue-950", ring: "ring-blue-600/30" },
-  { key: "PICKED_UP", label: "Picked Up", icon: PackageCheck, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-600", lightBg: "bg-indigo-100 dark:bg-indigo-950", ring: "ring-indigo-600/30" },
-  { key: "IN_TRANSIT", label: "In Transit", icon: Truck, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-600", lightBg: "bg-purple-100 dark:bg-purple-950", ring: "ring-purple-600/30" },
-  { key: "OUT_FOR_DELIVERY", label: "Out for Delivery", icon: MapPinned, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-600", lightBg: "bg-amber-100 dark:bg-amber-950", ring: "ring-amber-600/30" },
-  { key: "DELIVERED", label: "Delivered", icon: CheckCircle2, color: "text-green-600 dark:text-green-400", bg: "bg-green-600", lightBg: "bg-green-100 dark:bg-green-950", ring: "ring-green-600/30" },
+  { key: "BOOKED", label: "Booked", icon: Package, color: "text-blue-400", bg: "bg-blue-600", lightBg: "bg-blue-500/10", ring: "ring-blue-500/30" },
+  { key: "PICKED_UP", label: "Picked Up", icon: PackageCheck, color: "text-indigo-400", bg: "bg-indigo-600", lightBg: "bg-indigo-500/10", ring: "ring-indigo-500/30" },
+  { key: "IN_TRANSIT", label: "In Transit", icon: Truck, color: "text-violet-400", bg: "bg-violet-600", lightBg: "bg-violet-500/10", ring: "ring-violet-500/30" },
+  { key: "OUT_FOR_DELIVERY", label: "Out for Delivery", icon: MapPinned, color: "text-amber-400", bg: "bg-amber-600", lightBg: "bg-amber-500/10", ring: "ring-amber-500/30" },
+  { key: "DELIVERED", label: "Delivered", icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-600", lightBg: "bg-emerald-500/10", ring: "ring-emerald-500/30" },
 ];
 
 const RETURN_STAGES = [
-  { key: "DELIVERY_FAILED", label: "Failed", icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-600", lightBg: "bg-orange-100 dark:bg-orange-950", ring: "ring-orange-600/30" },
-  { key: "READY_FOR_RETURN", label: "Ready for Return", icon: AlertTriangle, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-600", lightBg: "bg-orange-100 dark:bg-orange-950", ring: "ring-orange-600/30" },
-  { key: "RETURN_IN_TRANSIT", label: "Return Transit", icon: RotateCcw, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-600", lightBg: "bg-rose-100 dark:bg-rose-950", ring: "ring-rose-600/30" },
-  { key: "RETURNED_TO_SHIPPER", label: "Returned", icon: RotateCcw, color: "text-red-600 dark:text-red-400", bg: "bg-red-600", lightBg: "bg-red-100 dark:bg-red-950", ring: "ring-red-600/30" },
+  { key: "DELIVERY_FAILED", label: "Failed", icon: AlertTriangle, color: "text-orange-400", bg: "bg-orange-600", lightBg: "bg-orange-500/10", ring: "ring-orange-500/30" },
+  { key: "READY_FOR_RETURN", label: "Ready for Return", icon: AlertTriangle, color: "text-orange-400", bg: "bg-orange-600", lightBg: "bg-orange-500/10", ring: "ring-orange-500/30" },
+  { key: "RETURN_IN_TRANSIT", label: "Return Transit", icon: RotateCcw, color: "text-rose-400", bg: "bg-rose-600", lightBg: "bg-rose-500/10", ring: "ring-rose-500/30" },
+  { key: "RETURNED_TO_SHIPPER", label: "Returned", icon: RotateCcw, color: "text-red-400", bg: "bg-red-600", lightBg: "bg-red-500/10", ring: "ring-red-500/30" },
 ];
 
 const CANCELLED_STAGE = { key: "CANCELLED", label: "Cancelled", icon: XCircle, color: "text-muted-foreground", bg: "bg-muted-foreground/60", lightBg: "bg-muted", ring: "ring-muted-foreground/20" };
@@ -245,40 +245,40 @@ function getActivityIcon(entry: any) {
 
 function getActivityColor(entry: any): string {
   if (entry._type === "status") {
-    if (entry.toStatus === "CANCELLED") return "text-red-500 bg-red-100 dark:bg-red-950";
-    if (entry.toStatus === "DELIVERED") return "text-green-500 bg-green-100 dark:bg-green-950";
-    if (entry.toStatus === "BOOKED") return "text-blue-500 bg-blue-100 dark:bg-blue-950";
-    if (entry.toStatus === "RETURN") return "text-rose-500 bg-rose-100 dark:bg-rose-950";
-    if (entry.actorType === "system") return "text-sky-500 bg-sky-100 dark:bg-sky-950";
-    return "text-indigo-500 bg-indigo-100 dark:bg-indigo-950";
+    if (entry.toStatus === "CANCELLED") return "text-red-400 bg-red-500/10";
+    if (entry.toStatus === "DELIVERED") return "text-emerald-400 bg-emerald-500/10";
+    if (entry.toStatus === "BOOKED") return "text-blue-400 bg-blue-500/10";
+    if (entry.toStatus === "RETURN") return "text-rose-400 bg-rose-500/10";
+    if (entry.actorType === "system") return "text-sky-400 bg-sky-500/10";
+    return "text-indigo-400 bg-indigo-500/10";
   }
   switch (entry.changeType) {
     case "PAYMENT_ADDED":
     case "PAYMENT_MARK_PAID":
-      return "text-emerald-500 bg-emerald-100 dark:bg-emerald-950";
+      return "text-emerald-400 bg-emerald-500/10";
     case "PAYMENT_DELETED":
     case "PAYMENT_REMOVED":
     case "PAYMENT_RESET":
-      return "text-orange-500 bg-orange-100 dark:bg-orange-950";
+      return "text-orange-400 bg-orange-500/10";
     case "BOOKING_CANCELLED":
     case "SHOPIFY_CANCELLED":
-      return "text-red-500 bg-red-100 dark:bg-red-950";
+      return "text-red-400 bg-red-500/10";
     case "REMARK_ADDED":
-      return "text-violet-500 bg-violet-100 dark:bg-violet-950";
+      return "text-violet-400 bg-violet-500/10";
     case "FIELD_EDIT":
-      return "text-amber-500 bg-amber-100 dark:bg-amber-950";
+      return "text-amber-400 bg-amber-500/10";
     case "WHATSAPP_SENT":
       return entry.newValue === "sent"
-        ? "text-green-600 bg-green-100 dark:bg-green-950"
-        : "text-red-500 bg-red-100 dark:bg-red-950";
+        ? "text-green-400 bg-green-500/10"
+        : "text-red-400 bg-red-500/10";
     case "WHATSAPP_CONFIRMED":
     case "ROBO_CONFIRMED":
-      return "text-green-600 bg-green-100 dark:bg-green-950";
+      return "text-green-400 bg-green-500/10";
     case "WHATSAPP_CANCELLED":
     case "ROBO_CANCELLED":
-      return "text-red-500 bg-red-100 dark:bg-red-950";
+      return "text-red-400 bg-red-500/10";
     case "WHATSAPP_QUERY":
-      return "text-blue-500 bg-blue-100 dark:bg-blue-950";
+      return "text-blue-400 bg-blue-500/10";
     default:
       return "text-muted-foreground bg-muted";
   }
@@ -530,10 +530,10 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
 
     if ((vs === 4 || rc === 'Answered') && dtmf === 1) {
       return (
-        <div className="mt-2 px-3 py-2 rounded-md bg-green-50 dark:bg-green-950/60 border border-green-200 dark:border-green-800">
+        <div className="mt-2 px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-500/20">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
-            <span className="text-sm font-semibold text-green-700 dark:text-green-300">Confirmed (pressed 1)</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="text-sm font-semibold text-emerald-300">Confirmed (pressed 1)</span>
           </div>
           {dur && <p className="text-xs text-muted-foreground mt-0.5 ml-6">Duration: {dur}</p>}
         </div>
@@ -541,10 +541,10 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
     }
     if ((vs === 4 || rc === 'Answered') && dtmf === 2) {
       return (
-        <div className="mt-2 px-3 py-2 rounded-md bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800">
+        <div className="mt-2 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/20">
           <div className="flex items-center gap-2">
-            <XCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
-            <span className="text-sm font-semibold text-red-700 dark:text-red-300">Cancelled (pressed 2)</span>
+            <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <span className="text-sm font-semibold text-red-300">Cancelled (pressed 2)</span>
           </div>
           {dur && <p className="text-xs text-muted-foreground mt-0.5 ml-6">Duration: {dur}</p>}
         </div>
@@ -552,10 +552,10 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
     }
     if (vs === 4 || rc === 'Answered') {
       return (
-        <div className="mt-2 px-3 py-2 rounded-md bg-orange-50 dark:bg-orange-950/60 border border-orange-200 dark:border-orange-800">
+        <div className="mt-2 px-3 py-2 rounded-md bg-orange-500/10 border border-orange-500/20">
           <div className="flex items-center gap-2">
-            <PhoneCall className="w-4 h-4 text-orange-500 shrink-0" />
-            <span className="text-sm font-medium text-orange-700 dark:text-orange-300">Connected — No Button Pressed</span>
+            <PhoneCall className="w-4 h-4 text-orange-400 shrink-0" />
+            <span className="text-sm font-medium text-orange-300">Connected — No Button Pressed</span>
           </div>
           {dur && <p className="text-xs text-muted-foreground mt-0.5 ml-6">Duration: {dur}</p>}
         </div>
@@ -563,10 +563,10 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
     }
     if (vs === 5 || rc === 'Busy') {
       return (
-        <div className="mt-2 px-3 py-2 rounded-md bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800">
+        <div className="mt-2 px-3 py-2 rounded-md bg-amber-500/10 border border-amber-500/20">
           <div className="flex items-center gap-2">
-            <Phone className="w-4 h-4 text-amber-500 shrink-0" />
-            <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Line Busy</span>
+            <Phone className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="text-sm font-medium text-amber-300">Line Busy</span>
           </div>
         </div>
       );
@@ -606,9 +606,9 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
       return <span className="text-xs text-muted-foreground italic">{elapsedLabel}</span>;
     }
     const cls = response.responseClassification || '';
-    if (cls === 'confirm') return <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-700">✓ Confirmed</Badge>;
-    if (cls === 'cancel') return <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 border-red-200 dark:border-red-700">✗ Cancelled</Badge>;
-    return <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-700">Sent a Question</Badge>;
+    if (cls === 'confirm') return <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">✓ Confirmed</Badge>;
+    if (cls === 'cancel') return <Badge className="bg-red-500/10 text-red-400 border border-red-500/20">✗ Cancelled</Badge>;
+    return <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20">Sent a Question</Badge>;
   }
 
   return (
@@ -635,13 +635,13 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                 const template = tplMatch ? tplMatch[1] : '';
                 return (
                   <div key={entry.key} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 text-green-500 bg-green-100 dark:bg-green-950">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 text-green-400 bg-green-500/10">
                       <MessageCircle className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium">WhatsApp Message #{num}</span>
-                        <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300 text-xs border-green-200 dark:border-green-800">whatsapp</Badge>
+                        <Badge variant="outline" className="bg-green-500/10 text-green-400 text-xs border-green-500/20">whatsapp</Badge>
                       </div>
                       {(phone || template) && (
                         <p className="text-xs text-muted-foreground mt-0.5">{phone}{phone && template ? ' · ' : ''}{template ? `template: ${template}` : ''}</p>
@@ -669,13 +669,13 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                 const timeStr = sent.createdAt ? formatDistanceToNow(new Date(sent.createdAt), { addSuffix: true }) : '';
                 return (
                   <div key={entry.key} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 text-indigo-500 bg-indigo-100 dark:bg-indigo-950">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 text-indigo-400 bg-indigo-500/10">
                       <Phone className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium">Call #{num}</span>
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 text-xs border-blue-200 dark:border-blue-800">robocall</Badge>
+                        <Badge variant="outline" className="bg-blue-500/10 text-blue-400 text-xs border-blue-500/20">robocall</Badge>
                       </div>
                       {renderCallOutcome(response)}
                       <p className="text-xs text-muted-foreground/60 mt-1.5">{timeStr}</p>
@@ -689,13 +689,13 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
                 const timeStr = event.createdAt ? formatDistanceToNow(new Date(event.createdAt), { addSuffix: true }) : '';
                 return (
                   <div key={entry.key} className="flex items-start gap-3 relative" data-testid={`timeline-entry-${idx}`}>
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 text-sky-500 bg-sky-100 dark:bg-sky-950">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 z-10 text-sky-400 bg-sky-500/10">
                       <Clock className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium">Call Scheduled</span>
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 text-xs border-blue-200 dark:border-blue-800">robocall</Badge>
+                        <Badge variant="outline" className="bg-blue-500/10 text-blue-400 text-xs border-blue-500/20">robocall</Badge>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">Outside call hours — will call between 10am–8pm</p>
                       <p className="text-xs text-muted-foreground/60 mt-0.5">{timeStr}</p>
@@ -880,11 +880,11 @@ function OrderTimeline({ orderId, auditLog, changeLog }: { orderId: string; audi
 function getConfirmationStatusBadge(status: string | null | undefined) {
   const s = (status || "pending").toLowerCase();
   const map: Record<string, { cls: string; label: string }> = {
-    confirmed: { cls: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "Confirmed" },
-    cancelled: { cls: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300", label: "Cancelled" },
-    pending: { cls: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300", label: "Pending" },
-    query: { cls: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "Query" },
-    conflict: { cls: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300", label: "Conflict" },
+    confirmed: { cls: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20", label: "Confirmed" },
+    cancelled: { cls: "bg-red-500/10 text-red-400 border border-red-500/20", label: "Cancelled" },
+    pending: { cls: "bg-amber-500/10 text-amber-400 border border-amber-500/20", label: "Pending" },
+    query: { cls: "bg-blue-500/10 text-blue-400 border border-blue-500/20", label: "Query" },
+    conflict: { cls: "bg-orange-500/10 text-orange-400 border border-orange-500/20", label: "Conflict" },
   };
   const c = map[s] || map.pending;
   return <Badge className={c.cls} data-testid="badge-confirmation-status">{c.label}</Badge>;
@@ -894,9 +894,9 @@ function getConfirmationSourceBadge(source: string | null | undefined) {
   if (!source) return null;
   const s = source.toLowerCase();
   const map: Record<string, { icon: React.ElementType; cls: string; label: string }> = {
-    whatsapp: { icon: MessageCircle, cls: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300", label: "WhatsApp" },
-    robocall: { icon: Phone, cls: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300", label: "Robocall" },
-    manual: { icon: UserCheck, cls: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300", label: "Manual" },
+    whatsapp: { icon: MessageCircle, cls: "bg-green-500/10 text-green-400 border border-green-500/20", label: "WhatsApp" },
+    robocall: { icon: Phone, cls: "bg-blue-500/10 text-blue-400 border border-blue-500/20", label: "Robocall" },
+    manual: { icon: UserCheck, cls: "bg-violet-500/10 text-violet-400 border border-violet-500/20", label: "Manual" },
   };
   const c = map[s] || { icon: Clock, cls: "bg-muted text-muted-foreground", label: source };
   const Icon = c.icon;
@@ -1189,7 +1189,7 @@ function WhatsAppChatPopup({ open, onClose, customerPhone, customerName }: {
                     <div
                       className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
                         isOutbound
-                          ? "bg-green-600 text-white dark:bg-green-700"
+                          ? "bg-green-600 text-white"
                           : "bg-muted"
                       }`}
                     >
@@ -1387,27 +1387,27 @@ function getTimelineEventLabel(eventType: string): string {
 
 function getTimelineEventColor(eventType: string): string {
   const map: Record<string, string> = {
-    ORDER_IMPORTED: "text-blue-500 bg-blue-100 dark:bg-blue-950",
-    WA_SENT: "text-green-500 bg-green-100 dark:bg-green-950",
-    WA_RESPONSE: "text-green-600 bg-green-100 dark:bg-green-950",
-    WA_EXHAUSTED: "text-orange-500 bg-orange-100 dark:bg-orange-950",
-    WA_NOT_AVAILABLE: "text-orange-500 bg-orange-100 dark:bg-orange-950",
-    WA_PERMANENT_FAILURE: "text-red-500 bg-red-100 dark:bg-red-950",
-    WA_REMINDER_SENT: "text-teal-500 bg-teal-100 dark:bg-teal-950",
+    ORDER_IMPORTED: "text-blue-400 bg-blue-500/10",
+    WA_SENT: "text-green-400 bg-green-500/10",
+    WA_RESPONSE: "text-green-400 bg-green-500/10",
+    WA_EXHAUSTED: "text-orange-400 bg-orange-500/10",
+    WA_NOT_AVAILABLE: "text-orange-400 bg-orange-500/10",
+    WA_PERMANENT_FAILURE: "text-red-400 bg-red-500/10",
+    WA_REMINDER_SENT: "text-teal-400 bg-teal-500/10",
     WA_REMINDERS_CANCELLED: "text-muted-foreground bg-muted",
     ROBO_QUEUE_CANCELLED: "text-muted-foreground bg-muted",
-    ROBO_EXHAUSTED: "text-orange-500 bg-orange-100 dark:bg-orange-950",
+    ROBO_EXHAUSTED: "text-orange-400 bg-orange-500/10",
     CHANNELS_CANCELLED: "text-muted-foreground bg-muted",
-    MOVED_TO_PENDING: "text-yellow-500 bg-yellow-100 dark:bg-yellow-950",
-    CALL_QUEUED: "text-blue-500 bg-blue-100 dark:bg-blue-950",
-    CALL_ATTEMPTED: "text-indigo-500 bg-indigo-100 dark:bg-indigo-950",
-    CALL_RESPONSE: "text-indigo-600 bg-indigo-100 dark:bg-indigo-950",
-    CALL_DEFERRED: "text-sky-500 bg-sky-100 dark:bg-sky-950",
-    STATUS_CHANGED: "text-purple-500 bg-purple-100 dark:bg-purple-950",
-    TAGS_WRITTEN: "text-sky-500 bg-sky-100 dark:bg-sky-950",
-    MANUAL_OVERRIDE: "text-amber-500 bg-amber-100 dark:bg-amber-950",
-    ORDER_BOOKED: "text-cyan-500 bg-cyan-100 dark:bg-cyan-950",
-    LATE_RESPONSE_IGNORED: "text-orange-500 bg-orange-100 dark:bg-orange-950",
+    MOVED_TO_PENDING: "text-amber-400 bg-amber-500/10",
+    CALL_QUEUED: "text-blue-400 bg-blue-500/10",
+    CALL_ATTEMPTED: "text-indigo-400 bg-indigo-500/10",
+    CALL_RESPONSE: "text-indigo-400 bg-indigo-500/10",
+    CALL_DEFERRED: "text-sky-400 bg-sky-500/10",
+    STATUS_CHANGED: "text-violet-400 bg-violet-500/10",
+    TAGS_WRITTEN: "text-sky-400 bg-sky-500/10",
+    MANUAL_OVERRIDE: "text-amber-400 bg-amber-500/10",
+    ORDER_BOOKED: "text-cyan-400 bg-cyan-500/10",
+    LATE_RESPONSE_IGNORED: "text-orange-400 bg-orange-500/10",
   };
   return map[eventType] || "text-muted-foreground bg-muted";
 }
@@ -1416,9 +1416,9 @@ function getChannelBadge(channel: string | null | undefined) {
   if (!channel) return null;
   const c = channel.toLowerCase();
   const map: Record<string, string> = {
-    whatsapp: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    robocall: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-    manual: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+    whatsapp: "bg-green-500/10 text-green-400 border border-green-500/20",
+    robocall: "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+    manual: "bg-violet-500/10 text-violet-400 border border-violet-500/20",
     system: "bg-muted text-muted-foreground",
   };
   return <Badge className={map[c] || map.system} variant="outline">{channel}</Badge>;
@@ -2095,8 +2095,8 @@ export default function OrderDetails() {
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-xl font-semibold">Order {String(order.orderNumber).replace(/^#/, '')}</h1>
               {(order as any).orderSource === "shopify_draft_order" && (
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700" title="Custom Order" data-testid="badge-draft-order">
-                  <PenLine className="w-3 h-3 text-green-700 dark:text-green-300" />
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-500/10 border border-green-500/20" title="Custom Order" data-testid="badge-draft-order">
+                  <PenLine className="w-3 h-3 text-green-400" />
                 </span>
               )}
               {getWorkflowBadge(order.workflowStatus)}
@@ -2618,7 +2618,7 @@ export default function OrderDetails() {
                 <CardTitle className="text-sm flex items-center gap-2">
                   <History className="w-4 h-4" />
                   Order History
-                  <Badge className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-700">
+                  <Badge className="text-[10px] px-1.5 py-0 bg-blue-500/10 text-blue-400 border border-blue-500/20">
                     {customerHistoryData.orderCount} orders
                   </Badge>
                 </CardTitle>
@@ -2638,9 +2638,9 @@ export default function OrderDetails() {
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-medium text-primary">{String(o.orderNumber || '').replace(/^#/, '')}</span>
                           <Badge className={`text-[9px] px-1 py-0 ${
-                            o.workflowStatus === "DELIVERED" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" :
-                            o.workflowStatus === "CANCELLED" ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" :
-                            o.workflowStatus === "RETURN" ? "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300" :
+                            o.workflowStatus === "DELIVERED" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                            o.workflowStatus === "CANCELLED" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
+                            o.workflowStatus === "RETURN" ? "bg-orange-500/10 text-orange-400 border border-orange-500/20" :
                             "bg-muted text-muted-foreground"
                           }`}>
                             {o.workflowStatus}
@@ -2830,9 +2830,9 @@ export default function OrderDetails() {
                 const tc = tagConfig || { confirm: "Robo-Confirm", pending: "Robo-Pending", cancel: "Robo-Cancel" };
                 const getRoboStyle = (tag: string) => {
                   const lt = tag.toLowerCase();
-                  if (lt === tc.confirm.toLowerCase()) return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
-                  if (lt === tc.pending.toLowerCase()) return 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300';
-                  if (lt === tc.cancel.toLowerCase()) return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
+                  if (lt === tc.confirm.toLowerCase()) return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+                  if (lt === tc.pending.toLowerCase()) return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
+                  if (lt === tc.cancel.toLowerCase()) return 'bg-red-500/10 text-red-400 border border-red-500/20';
                   return '';
                 };
                 return (

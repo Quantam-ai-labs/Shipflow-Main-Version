@@ -200,7 +200,7 @@ export default function MetaCampaigns() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "ACTIVE":
-        return <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" data-testid={`badge-status-${status}`}>Active</Badge>;
+        return <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-testid={`badge-status-${status}`}>Active</Badge>;
       case "PAUSED":
         return <Badge variant="secondary" data-testid={`badge-status-${status}`}>Paused</Badge>;
       case "ARCHIVED":

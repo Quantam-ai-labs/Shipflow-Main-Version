@@ -1280,8 +1280,8 @@ export default function Integrations() {
             </div>
 
             {!useManualAuth && (
-              <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
-                <p className="text-sm text-blue-800 dark:text-blue-200">
+              <div className="p-3 bg-blue-500/10 rounded-md border border-blue-500/20">
+                <p className="text-sm text-blue-300">
                   You'll be redirected to Shopify to authorize 1SOL.AI. This uses the standard Shopify app install flow.
                 </p>
               </div>
@@ -1444,16 +1444,16 @@ export default function Integrations() {
               )}
 
               {selectedCourier === 'leopards' && !useEnvCreds && (
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <p className="text-xs text-amber-400">
                     Find your API Key and Password in your Leopards account under <strong>API Settings</strong> &rarr; <strong>API Management</strong>.
                   </p>
                 </div>
               )}
 
               {selectedCourier === 'postex' && !useEnvCreds && (
-                <div className="p-3 bg-amber-50 dark:bg-amber-950/50 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <p className="text-xs text-amber-400">
                     Your API Token can be found in your PostEx merchant dashboard under <strong>Integration Settings</strong>.
                   </p>
                 </div>

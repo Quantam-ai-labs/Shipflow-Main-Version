@@ -531,8 +531,8 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center shrink-0">
-                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+              <div className="w-9 h-9 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <CheckCircle className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Order Confirmed</p>
@@ -871,7 +871,7 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
                   </div>
                   <div className="p-4 flex flex-col gap-3">
                     {shopifyError && (
-                      <div className="rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-700 dark:text-amber-300" data-testid="status-shopify-error">
+                      <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-400" data-testid="status-shopify-error">
                         ⚠ {shopifyError} — customer search unavailable
                       </div>
                     )}

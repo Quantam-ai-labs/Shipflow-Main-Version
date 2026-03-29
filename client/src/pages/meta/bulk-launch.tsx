@@ -518,12 +518,12 @@ export default function MetaBulkLaunch() {
                       <Badge
                         className={`text-xs ${
                           job.status === "launched"
-                            ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                             : job.status === "failed"
-                            ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+                            ? "bg-red-500/10 text-red-400 border border-red-500/20"
                             : job.status === "launching"
-                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-                            : "bg-gray-100 text-gray-700"
+                            ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                            : "bg-muted text-muted-foreground"
                         }`}
                         data-testid={`badge-job-status-${job.id}`}
                       >
