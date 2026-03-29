@@ -191,17 +191,17 @@ export default function MarketingDashboard() {
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {kpiCards.map((card, i) => (
-          <Card key={i} data-testid={`card-kpi-${i}`}>
+          <Card key={i} className="bg-[#0d1322] border-white/[0.08]" data-testid={`card-kpi-${i}`}>
             <CardContent className="p-3">
               {summaryLoading ? (
                 <Skeleton className="h-12 w-full" />
               ) : (
                 <>
                   <div className="flex items-center gap-1.5 mb-1">
-                    <card.icon className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-[11px] text-muted-foreground font-medium">{card.title}</span>
+                    <card.icon className={`w-3.5 h-3.5 ${i === 0 ? "text-amber-400" : i === 1 ? "text-emerald-400" : i === 2 ? "text-blue-400" : i === 3 ? "text-violet-400" : i === 4 ? "text-emerald-400" : "text-blue-400"}`} />
+                    <span className="text-[11px] text-white/40 font-medium">{card.title}</span>
                   </div>
-                  <div className="text-lg font-bold" data-testid={`text-kpi-value-${i}`}>{card.value}</div>
+                  <div className="text-lg font-bold text-white/90" data-testid={`text-kpi-value-${i}`}>{card.value}</div>
                 </>
               )}
             </CardContent>
@@ -224,15 +224,16 @@ export default function MarketingDashboard() {
             ) : (
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" className="text-xs" tick={{ fontSize: 11 }} />
-                  <YAxis className="text-xs" tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: "rgba(255,255,255,0.4)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "rgba(255,255,255,0.4)" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip
                     formatter={(value: number, name: string) => [formatCurrency(value), name === "spend" ? "Spend" : "Revenue"]}
-                    contentStyle={{ fontSize: 12 }}
+                    contentStyle={{ fontSize: 12, backgroundColor: "#0d1322", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "rgba(255,255,255,0.9)" }}
+                    labelStyle={{ color: "rgba(255,255,255,0.6)" }}
                   />
-                  <Legend />
-                  <Line type="monotone" dataKey="spend" stroke="#ef4444" strokeWidth={2} dot={false} name="Spend" />
+                  <Legend wrapperStyle={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }} />
+                  <Line type="monotone" dataKey="spend" stroke="#f59e0b" strokeWidth={2} dot={false} name="Spend" />
                   <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} dot={false} name="Revenue" />
                 </LineChart>
               </ResponsiveContainer>
@@ -290,18 +291,22 @@ export default function MarketingDashboard() {
           ) : (
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={sortedCampaigns.slice(0, 10)} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis type="number" tick={{ fontSize: 11, fill: "rgba(255,255,255,0.4)" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <YAxis
                   type="category"
                   dataKey="name"
                   width={120}
-                  tick={{ fontSize: 10 }}
+                  tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }}
+                  axisLine={false}
+                  tickLine={false}
                   tickFormatter={(v) => v.length > 18 ? v.substring(0, 18) + "..." : v}
                 />
-                <Tooltip formatter={(value: number, name: string) => [formatCurrency(value), name === "spend" ? "Spend" : "Revenue"]} />
-                <Legend />
-                <Bar dataKey="spend" fill="#ef4444" name="Spend" radius={[0, 2, 2, 0]} />
+                <Tooltip formatter={(value: number, name: string) => [formatCurrency(value), name === "spend" ? "Spend" : "Revenue"]}
+                  contentStyle={{ fontSize: 12, backgroundColor: "#0d1322", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, color: "rgba(255,255,255,0.9)" }}
+                  labelStyle={{ color: "rgba(255,255,255,0.6)" }} />
+                <Legend wrapperStyle={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }} />
+                <Bar dataKey="spend" fill="#f59e0b" name="Spend" radius={[0, 2, 2, 0]} />
                 <Bar dataKey="revenue" fill="#10b981" name="Revenue" radius={[0, 2, 2, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -324,41 +329,39 @@ export default function MarketingDashboard() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs">Campaign</TableHead>
-                    <TableHead className="text-xs text-right">Spend</TableHead>
-                    <TableHead className="text-xs text-right">Revenue</TableHead>
-                    <TableHead className="text-xs text-right">Purchases</TableHead>
-                    <TableHead className="text-xs text-right">CPA</TableHead>
-                    <TableHead className="text-xs text-right">ROAS</TableHead>
-                    <TableHead className="text-xs text-right">CTR</TableHead>
-                    <TableHead className="text-xs text-center">Status</TableHead>
+                  <TableRow className="bg-white/[0.04] border-b border-white/[0.06]">
+                    <TableHead className="text-xs text-white/40 uppercase tracking-wider">Campaign</TableHead>
+                    <TableHead className="text-xs text-white/40 uppercase tracking-wider text-right">Spend</TableHead>
+                    <TableHead className="text-xs text-white/40 uppercase tracking-wider text-right">Revenue</TableHead>
+                    <TableHead className="text-xs text-white/40 uppercase tracking-wider text-right">Purchases</TableHead>
+                    <TableHead className="text-xs text-white/40 uppercase tracking-wider text-right">CPA</TableHead>
+                    <TableHead className="text-xs text-white/40 uppercase tracking-wider text-right">ROAS</TableHead>
+                    <TableHead className="text-xs text-white/40 uppercase tracking-wider text-right">CTR</TableHead>
+                    <TableHead className="text-xs text-white/40 uppercase tracking-wider text-center">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sortedCampaigns.map((c: any, i: number) => (
-                    <TableRow key={c.entityId || i} data-testid={`row-campaign-${i}`}>
-                      <TableCell className="text-sm font-medium max-w-[200px] truncate" data-testid={`text-campaign-name-${i}`}>
+                    <TableRow key={c.entityId || i} className={`hover:bg-blue-500/[0.06] border-b border-white/[0.04] ${i % 2 === 1 ? "bg-white/[0.02]" : ""}`} data-testid={`row-campaign-${i}`}>
+                      <TableCell className="text-sm font-medium max-w-[200px] truncate text-white/90" data-testid={`text-campaign-name-${i}`}>
                         {c.name}
                       </TableCell>
-                      <TableCell className="text-sm text-right">{formatCurrency(c.spend)}</TableCell>
-                      <TableCell className="text-sm text-right">{formatCurrency(c.purchaseValue || c.revenue || 0)}</TableCell>
-                      <TableCell className="text-sm text-right">{c.purchases}</TableCell>
-                      <TableCell className="text-sm text-right">{formatCurrency(c.cpa)}</TableCell>
-                      <TableCell className="text-sm text-right">
-                        <span className={c.roas >= 1 ? "text-green-600" : "text-red-600"}>
+                      <TableCell className="text-sm text-right tabular-nums text-amber-400">{formatCurrency(c.spend)}</TableCell>
+                      <TableCell className="text-sm text-right tabular-nums text-emerald-400">{formatCurrency(c.purchaseValue || c.revenue || 0)}</TableCell>
+                      <TableCell className="text-sm text-right tabular-nums text-white/80">{c.purchases}</TableCell>
+                      <TableCell className="text-sm text-right tabular-nums text-white/80">{formatCurrency(c.cpa)}</TableCell>
+                      <TableCell className="text-sm text-right tabular-nums">
+                        <span className={c.roas >= 2 ? "text-emerald-400 font-medium" : c.roas >= 1 ? "text-blue-400" : "text-red-400"}>
                           {c.roas.toFixed(2)}x
                         </span>
                       </TableCell>
-                      <TableCell className="text-sm text-right">{c.ctr.toFixed(2)}%</TableCell>
+                      <TableCell className="text-sm text-right tabular-nums text-white/80">{c.ctr.toFixed(2)}%</TableCell>
                       <TableCell className="text-center">
-                        <Badge
-                          variant="secondary"
-                          className="text-[10px]"
-                          data-testid={`badge-campaign-status-${i}`}
-                        >
-                          {c.status}
-                        </Badge>
+                        {c.status === "ACTIVE" ? (
+                          <Badge className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-testid={`badge-campaign-status-${i}`}>Active</Badge>
+                        ) : (
+                          <Badge className="text-[10px] bg-white/[0.06] text-white/30 border border-white/10" data-testid={`badge-campaign-status-${i}`}>{c.status}</Badge>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

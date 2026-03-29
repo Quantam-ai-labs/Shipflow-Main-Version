@@ -400,12 +400,12 @@ export default function MetaBulkLaunch() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="bg-white/[0.04] border-b border-white/[0.06]">
                     <TableHead className="w-10"></TableHead>
-                    <TableHead>Creative</TableHead>
-                    <TableHead>Headline</TableHead>
-                    <TableHead>Primary Text</TableHead>
-                    <TableHead>Preview</TableHead>
+                    <TableHead className="text-white/40 text-xs uppercase tracking-wider">Creative</TableHead>
+                    <TableHead className="text-white/40 text-xs uppercase tracking-wider">Headline</TableHead>
+                    <TableHead className="text-white/40 text-xs uppercase tracking-wider">Primary Text</TableHead>
+                    <TableHead className="text-white/40 text-xs uppercase tracking-wider">Preview</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -417,7 +417,7 @@ export default function MetaBulkLaunch() {
                     return (
                       <TableRow
                         key={key}
-                        className={!combo.selected ? "opacity-40" : ""}
+                        className={`border-b border-white/[0.04] hover:bg-blue-500/[0.06] ${!combo.selected ? "opacity-40" : ""}`}
                         data-testid={`row-combo-${key}`}
                       >
                         <TableCell>

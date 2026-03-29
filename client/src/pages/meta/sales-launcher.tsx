@@ -891,7 +891,7 @@ export default function SalesLauncher() {
         </div>
 
         {adSets.map((adSet, si) => (
-          <div key={adSet.id} className={glassCard} data-testid={`adset-panel-${si}`}>
+          <div key={adSet.id} className={`${glassCard} border-l-2 border-l-violet-500/60`} data-testid={`adset-panel-${si}`}>
             <div
               className="px-5 py-3 flex items-center gap-2 cursor-pointer hover:bg-white/40 dark:hover:bg-white/[0.03] transition-all rounded-t-2xl"
               onClick={() => updateAdSet(si, { isExpanded: !adSet.isExpanded })}
@@ -1027,7 +1027,7 @@ export default function SalesLauncher() {
 
                         <TabsContent value="UPLOAD_IMAGE" className="space-y-2 mt-2">
                           <div
-                            className="p-4 text-center cursor-pointer rounded-lg border border-dashed border-black/10 dark:border-white/10 hover:bg-white/60 dark:hover:bg-white/[0.06] transition-all"
+                            className="p-4 text-center cursor-pointer rounded-lg border border-dashed border-white/20 hover:border-blue-500/50 hover:bg-blue-500/[0.06] transition-all"
                             onClick={() => document.getElementById(`imageFileInput_${ad.id}`)?.click()}
                             data-testid={`dropzone-image-${si}-${ai}`}
                           >
@@ -1076,7 +1076,7 @@ export default function SalesLauncher() {
 
                         <TabsContent value="UPLOAD_VIDEO" className="space-y-2 mt-2">
                           <div
-                            className="p-4 text-center cursor-pointer rounded-lg border border-dashed border-black/10 dark:border-white/10 hover:bg-white/60 dark:hover:bg-white/[0.06] transition-all"
+                            className="p-4 text-center cursor-pointer rounded-lg border border-dashed border-white/20 hover:border-blue-500/50 hover:bg-blue-500/[0.06] transition-all"
                             onClick={() => document.getElementById(`videoFileInput_${ad.id}`)?.click()}
                             data-testid={`dropzone-video-${si}-${ai}`}
                           >

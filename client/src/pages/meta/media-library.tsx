@@ -260,17 +260,17 @@ export default function MetaMediaLibrary() {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as LibraryTab); setSearchQuery(""); }}>
-        <TabsList className="w-full grid grid-cols-4">
-          <TabsTrigger value="local" className="gap-1.5 text-xs sm:text-sm" data-testid="tab-local">
+        <TabsList className="w-full grid grid-cols-4 bg-white/[0.04] border border-white/[0.08]">
+          <TabsTrigger value="local" className="gap-1.5 text-xs sm:text-sm data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400" data-testid="tab-local">
             <ImageIcon className="w-3.5 h-3.5 hidden sm:block" /> Local Library
           </TabsTrigger>
-          <TabsTrigger value="ad-account" className="gap-1.5 text-xs sm:text-sm" data-testid="tab-ad-account">
+          <TabsTrigger value="ad-account" className="gap-1.5 text-xs sm:text-sm data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400" data-testid="tab-ad-account">
             <SiMeta className="w-3.5 h-3.5 hidden sm:block" /> Ad Account
           </TabsTrigger>
-          <TabsTrigger value="facebook" className="gap-1.5 text-xs sm:text-sm" data-testid="tab-facebook">
+          <TabsTrigger value="facebook" className="gap-1.5 text-xs sm:text-sm data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400" data-testid="tab-facebook">
             <SiFacebook className="w-3.5 h-3.5 hidden sm:block" /> Facebook
           </TabsTrigger>
-          <TabsTrigger value="instagram" className="gap-1.5 text-xs sm:text-sm" data-testid="tab-instagram">
+          <TabsTrigger value="instagram" className="gap-1.5 text-xs sm:text-sm data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400" data-testid="tab-instagram">
             <SiInstagram className="w-3.5 h-3.5 hidden sm:block" /> Instagram
           </TabsTrigger>
         </TabsList>

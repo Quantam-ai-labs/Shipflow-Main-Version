@@ -136,7 +136,12 @@ function formatUsd(val: number): string {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  return <Badge variant="secondary" className="text-[8px] px-1 py-0 leading-tight">{status}</Badge>;
+  const cls = status === "ACTIVE"
+    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+    : status === "PAUSED"
+    ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+    : "bg-white/[0.06] text-white/60 border border-white/[0.12]";
+  return <Badge className={`${cls} text-[8px] px-1 py-0 leading-tight`}>{status}</Badge>;
 }
 
 function MatchIndicator({ type }: { type: string }) {
@@ -900,25 +905,25 @@ export default function AdsProfitability() {
                 <col style={{width: "8%"}} />
                 <col style={{width: "10%"}} />
               </colgroup>
-              <thead className="sticky top-0 z-10 bg-emerald-800">
-                <tr>
-                  <th className="text-center text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 whitespace-nowrap overflow-hidden">Status</th>
-                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 truncate overflow-hidden">Campaign</th>
-                  <th className="text-left text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 truncate overflow-hidden">Product</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 whitespace-nowrap overflow-hidden">Sale Price</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 whitespace-nowrap overflow-hidden">Cost Price</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 whitespace-nowrap overflow-hidden">Ad Spend</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 whitespace-nowrap overflow-hidden">Orders</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 whitespace-nowrap overflow-hidden">Dispatched</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 whitespace-nowrap overflow-hidden">Delivered</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 whitespace-nowrap overflow-hidden">CPA (PKR)</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 whitespace-nowrap overflow-hidden">Profit Margin</th>
-                  <th className="text-right text-white text-xs font-semibold px-2 py-1.5 border border-emerald-700 whitespace-nowrap overflow-hidden">Net Profit</th>
+              <thead className="sticky top-0 z-10 bg-[#0d1322]">
+                <tr className="border-b border-white/[0.06]">
+                  <th className="text-center text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] whitespace-nowrap overflow-hidden">Status</th>
+                  <th className="text-left text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] truncate overflow-hidden">Campaign</th>
+                  <th className="text-left text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] truncate overflow-hidden">Product</th>
+                  <th className="text-right text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] whitespace-nowrap overflow-hidden">Sale Price</th>
+                  <th className="text-right text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] whitespace-nowrap overflow-hidden">Cost Price</th>
+                  <th className="text-right text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] whitespace-nowrap overflow-hidden">Ad Spend</th>
+                  <th className="text-right text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] whitespace-nowrap overflow-hidden">Orders</th>
+                  <th className="text-right text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] whitespace-nowrap overflow-hidden">Dispatched</th>
+                  <th className="text-right text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] whitespace-nowrap overflow-hidden">Delivered</th>
+                  <th className="text-right text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] whitespace-nowrap overflow-hidden">CPA (PKR)</th>
+                  <th className="text-right text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] whitespace-nowrap overflow-hidden">Profit Margin</th>
+                  <th className="text-right text-white/40 text-[10px] font-semibold uppercase tracking-wider px-2 py-1.5 border border-white/[0.06] whitespace-nowrap overflow-hidden">Net Profit</th>
                 </tr>
               </thead>
               <tbody>
                 {mergedRows.map((row, idx) => (
-                  <tr key={row.campaignId} className="hover:bg-muted/30 transition-colors" data-testid={`row-campaign-${row.campaignId}`}>
+                  <tr key={row.campaignId} className="hover:bg-blue-500/[0.06] transition-colors" data-testid={`row-campaign-${row.campaignId}`}>
                     <td className="border border-border px-2 py-1 text-xs text-center" data-testid={`text-status-${row.campaignId}`}>
                       <StatusBadge status={row.status} />
                     </td>
@@ -1105,7 +1110,7 @@ export default function AdsProfitability() {
                   </tr>
                 ))}
                 {mergedRows.length > 0 && (
-                  <tr className="bg-muted/50 font-semibold">
+                  <tr className="bg-white/[0.04] font-semibold">
                     <td className="border border-border px-2 py-1.5 text-xs"></td>
                     <td className="border border-border px-2 py-1.5 text-xs font-semibold">Totals</td>
                     <td className="border border-border px-2 py-1.5 text-xs"></td>
@@ -1140,46 +1145,46 @@ export default function AdsProfitability() {
 
       {computedRows.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="pt-6">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <DollarSign className="w-4 h-4" />
+              <div className="flex items-center gap-2 text-xs text-white/40 uppercase tracking-wider mb-1">
+                <DollarSign className="w-4 h-4 text-amber-400" />
                 Total Ad Spend
               </div>
-              <p className="text-xl font-bold tabular-nums" data-testid="text-summary-ad-spend">
+              <p className="text-xl font-bold tabular-nums text-amber-400" data-testid="text-summary-ad-spend">
                 {formatUsd(totals.adSpend)}
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="pt-6">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <ShoppingCart className="w-4 h-4" />
+              <div className="flex items-center gap-2 text-xs text-white/40 uppercase tracking-wider mb-1">
+                <ShoppingCart className="w-4 h-4 text-blue-400" />
                 Total Orders
               </div>
-              <p className="text-xl font-bold tabular-nums" data-testid="text-summary-total-orders">
+              <p className="text-xl font-bold tabular-nums text-white/90" data-testid="text-summary-total-orders">
                 {totals.totalOrders}
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="pt-6">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <CheckCircle className="w-4 h-4" />
+              <div className="flex items-center gap-2 text-xs text-white/40 uppercase tracking-wider mb-1">
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
                 Total Delivered
               </div>
-              <p className="text-xl font-bold tabular-nums" data-testid="text-summary-delivered">
+              <p className="text-xl font-bold tabular-nums text-white/90" data-testid="text-summary-delivered">
                 {totals.delivered}
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="pt-6">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                {totals.netProfit >= 0 ? <TrendingUp className="w-4 h-4 text-green-600" /> : <TrendingDown className="w-4 h-4 text-red-600" />}
+              <div className="flex items-center gap-2 text-xs text-white/40 uppercase tracking-wider mb-1">
+                {totals.netProfit >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <TrendingDown className="w-4 h-4 text-red-400" />}
                 Net Profit
               </div>
-              <p className={`text-xl font-bold tabular-nums ${totals.netProfit >= 0 ? "text-green-600" : "text-red-600"}`} data-testid="text-summary-net-profit">
+              <p className={`text-xl font-bold tabular-nums ${totals.netProfit >= 0 ? "text-emerald-400" : "text-red-400"}`} data-testid="text-summary-net-profit">
                 {formatCurrency(totals.netProfit)}
               </p>
             </CardContent>
@@ -1220,23 +1225,23 @@ export default function AdsProfitability() {
               </div>
               <div className="border rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
-                  <thead className="bg-muted/50">
+                  <thead className="bg-white/[0.04] border-b border-white/[0.06]">
                     <tr>
-                      <th className="text-left px-3 py-2 text-xs font-medium">Product</th>
-                      <th className="text-right px-3 py-2 text-xs font-medium">Campaigns</th>
-                      <th className="text-right px-3 py-2 text-xs font-medium">Ad Spend</th>
-                      <th className="text-right px-3 py-2 text-xs font-medium">Orders</th>
-                      <th className="text-right px-3 py-2 text-xs font-medium">Delivered</th>
-                      <th className="text-right px-3 py-2 text-xs font-medium">CPA</th>
-                      <th className="text-right px-3 py-2 text-xs font-medium">ROAS</th>
-                      <th className="text-right px-3 py-2 text-xs font-medium">Net Profit</th>
+                      <th className="text-left px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">Product</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">Campaigns</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">Ad Spend</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">Orders</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">Delivered</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">CPA</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">ROAS</th>
+                      <th className="text-right px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">Net Profit</th>
                     </tr>
                   </thead>
                   <tbody>
                     {productSummary.map((p) => {
                       const cpa = p.orders > 0 ? (p.adSpend * dRate) / p.orders : 0;
                       return (
-                        <tr key={p.productId} className="border-t hover:bg-muted/30" data-testid={`row-product-${p.productId}`}>
+                        <tr key={p.productId} className="border-t border-white/[0.06] hover:bg-blue-500/[0.06]" data-testid={`row-product-${p.productId}`}>
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
                               <Avatar className="h-6 w-6 rounded flex-shrink-0">

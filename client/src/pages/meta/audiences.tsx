@@ -142,13 +142,13 @@ export default function MetaAudiences() {
   const getTypeBadge = (type: string) => {
     switch (type) {
       case "customer_list":
-        return <Badge variant="secondary" className="text-xs"><Mail className="w-3 h-3 mr-1" />Customer List</Badge>;
+        return <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs"><Mail className="w-3 h-3 mr-1" />Customer List</Badge>;
       case "website":
-        return <Badge variant="secondary" className="text-xs"><Globe className="w-3 h-3 mr-1" />Website Visitors</Badge>;
+        return <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs"><Globe className="w-3 h-3 mr-1" />Website Visitors</Badge>;
       case "lookalike":
         return <Badge className="bg-violet-500/10 text-violet-400 border border-violet-500/20 text-xs"><Copy className="w-3 h-3 mr-1" />Lookalike</Badge>;
       default:
-        return <Badge variant="outline" className="text-xs">{type}</Badge>;
+        return <Badge className="bg-white/[0.06] text-white/60 border border-white/[0.12] text-xs">{type}</Badge>;
     }
   };
 
@@ -188,7 +188,7 @@ export default function MetaAudiences() {
       ) : (
         <div className="space-y-2">
           {audiences.map((audience) => (
-            <Card key={audience.id} className="hover:bg-muted/30 transition-colors" data-testid={`card-audience-${audience.id}`}>
+            <Card key={audience.id} className="bg-[#0d1322] border-white/[0.08] hover:bg-blue-500/[0.06] transition-colors" data-testid={`card-audience-${audience.id}`}>
               <CardContent className="flex items-center justify-between py-4 px-5 gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">

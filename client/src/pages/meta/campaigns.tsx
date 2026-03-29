@@ -255,18 +255,18 @@ export default function MetaCampaigns() {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedIds(new Set()); setSelectedAdSetIds(new Set()); }}>
-        <TabsList>
-          <TabsTrigger value="campaigns" data-testid="tab-campaigns">
+        <TabsList className="bg-white/[0.04] border border-white/[0.08]">
+          <TabsTrigger value="campaigns" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400 data-[state=active]:border-b-2 data-[state=active]:border-b-blue-500" data-testid="tab-campaigns">
             <Megaphone className="w-3.5 h-3.5 mr-1.5" />Campaigns ({campaigns.length})
           </TabsTrigger>
-          <TabsTrigger value="adsets" data-testid="tab-adsets">
+          <TabsTrigger value="adsets" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400 data-[state=active]:border-b-2 data-[state=active]:border-b-blue-500" data-testid="tab-adsets">
             <Layers className="w-3.5 h-3.5 mr-1.5" />Ad Sets ({adSets.length})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="campaigns" className="space-y-4 mt-4">
           {hasSelection && (
-            <Card className="border-primary/30 bg-primary/5" data-testid="panel-bulk-actions">
+            <Card className="border-blue-500/30 bg-blue-500/[0.08]" data-testid="panel-bulk-actions">
               <CardContent className="flex items-center gap-3 py-3 px-4 flex-wrap">
                 <span className="text-sm font-medium" data-testid="text-selected-count">{selectedIds.size} selected</span>
                 <div className="h-4 w-px bg-border" />
@@ -316,7 +316,7 @@ export default function MetaCampaigns() {
                 <span className="text-xs text-muted-foreground">Select All</span>
               </div>
               {campaigns.map((campaign) => (
-                <Card key={campaign.id} className={`transition-colors ${selectedIds.has(campaign.id) ? "border-primary/50 bg-primary/5" : "hover:bg-muted/30"}`} data-testid={`card-campaign-${campaign.id}`}>
+                <Card key={campaign.id} className={`transition-colors ${selectedIds.has(campaign.id) ? "border-blue-500/40 bg-blue-500/10" : "border-white/[0.06] hover:bg-white/[0.04]"}`} data-testid={`card-campaign-${campaign.id}`}>
                   <CardContent className="flex items-center py-4 px-5 gap-4">
                     <Checkbox checked={selectedIds.has(campaign.id)} onCheckedChange={() => toggleSelect(campaign.id)} data-testid={`checkbox-campaign-${campaign.id}`} />
                     <div className="flex-1 min-w-0">
@@ -355,7 +355,7 @@ export default function MetaCampaigns() {
 
         <TabsContent value="adsets" className="space-y-4 mt-4">
           {hasAdSetSelection && (
-            <Card className="border-primary/30 bg-primary/5" data-testid="panel-adset-bulk-actions">
+            <Card className="border-blue-500/30 bg-blue-500/[0.08]" data-testid="panel-adset-bulk-actions">
               <CardContent className="flex items-center gap-3 py-3 px-4 flex-wrap">
                 <span className="text-sm font-medium" data-testid="text-adset-selected-count">{selectedAdSetIds.size} selected</span>
                 <div className="h-4 w-px bg-border" />
@@ -413,7 +413,7 @@ export default function MetaCampaigns() {
                 const ageRange = targeting.age_min && targeting.age_max ? `${targeting.age_min}-${targeting.age_max}` : "";
                 const genders = targeting.genders?.includes(1) && targeting.genders?.includes(2) ? "All" : targeting.genders?.includes(1) ? "Male" : targeting.genders?.includes(2) ? "Female" : "All";
                 return (
-                  <Card key={adSet.id} className={`transition-colors ${selectedAdSetIds.has(adSet.id) ? "border-primary/50 bg-primary/5" : "hover:bg-muted/30"}`} data-testid={`card-adset-${adSet.id}`}>
+                  <Card key={adSet.id} className={`transition-colors ${selectedAdSetIds.has(adSet.id) ? "border-blue-500/40 bg-blue-500/10" : "border-white/[0.06] hover:bg-white/[0.04]"}`} data-testid={`card-adset-${adSet.id}`}>
                     <CardContent className="flex items-center py-4 px-5 gap-4">
                       <Checkbox checked={selectedAdSetIds.has(adSet.id)} onCheckedChange={() => toggleAdSetSelect(adSet.id)} data-testid={`checkbox-adset-${adSet.id}`} />
                       <div className="flex-1 min-w-0">

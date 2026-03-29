@@ -336,9 +336,12 @@ export default function AdsManager() {
   const activeColumns = ALL_COLUMNS.filter(c => visibleColumns.includes(c.key));
 
   const statusBadge = (status: string) => {
+    if (status === "ACTIVE") {
+      return <Badge className="text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-testid="badge-status">Active</Badge>;
+    }
     return (
-      <Badge variant="secondary" className="text-[10px] font-medium" data-testid="badge-status">
-        {status}
+      <Badge className="text-[10px] font-medium bg-white/[0.06] text-white/30 border border-white/10" data-testid="badge-status">
+        {status === "PAUSED" ? "Paused" : status}
       </Badge>
     );
   };
@@ -384,9 +387,9 @@ export default function AdsManager() {
               size="sm"
               onClick={() => setAutoRefresh(!autoRefresh)}
               data-testid="button-auto-refresh"
-              className={autoRefresh ? "border-green-500 text-green-600" : ""}
+              className={autoRefresh ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10" : "border-white/10 text-white/60 bg-white/[0.04]"}
             >
-              {autoRefresh ? <ToggleRight className="w-4 h-4 mr-1 text-green-500" /> : <ToggleLeft className="w-4 h-4 mr-1" />}
+              {autoRefresh ? <ToggleRight className="w-4 h-4 mr-1 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 mr-1 text-white/40" />}
               Auto
             </Button>
             <Button
@@ -395,11 +398,12 @@ export default function AdsManager() {
               onClick={() => syncMutation.mutate()}
               disabled={syncMutation.isPending}
               data-testid="button-sync"
+              className="border-blue-500/40 text-blue-400 hover:bg-blue-500/10"
             >
               {syncMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
               Sync Now
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-ads">
+            <Button variant="outline" size="sm" onClick={handleExportCSV} data-testid="button-export-ads" className="border-white/10 text-white/60 hover:bg-white/[0.06]">
               <Download className="w-4 h-4 mr-1" />
               CSV
             </Button>
@@ -531,38 +535,38 @@ export default function AdsManager() {
 
       {data?.totals && !isLoading && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Total Spend</div>
-              <div className="text-lg font-bold mt-0.5" data-testid="text-total-spend">{formatCurrency(data.totals.spend)}</div>
+              <div className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Total Spend</div>
+              <div className="text-lg font-bold mt-0.5 text-amber-400" data-testid="text-total-spend">{formatCurrency(data.totals.spend)}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Purchases</div>
-              <div className="text-lg font-bold mt-0.5" data-testid="text-total-purchases">{formatNumber(data.totals.purchases)}</div>
+              <div className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Purchases</div>
+              <div className="text-lg font-bold mt-0.5 text-white/90" data-testid="text-total-purchases">{formatNumber(data.totals.purchases)}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Revenue</div>
-              <div className="text-lg font-bold mt-0.5" data-testid="text-total-revenue">{formatCurrency(data.totals.purchaseValue)}</div>
+              <div className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Revenue</div>
+              <div className="text-lg font-bold mt-0.5 text-emerald-400" data-testid="text-total-revenue">{formatCurrency(data.totals.purchaseValue)}</div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">ROAS</div>
+              <div className="text-[10px] text-white/40 font-medium uppercase tracking-wider">ROAS</div>
               <div className="text-lg font-bold mt-0.5" data-testid="text-total-roas">
-                <span className={data.totals.roas >= 1 ? "text-green-600" : "text-red-600"}>
+                <span className={data.totals.roas >= 2 ? "text-emerald-400" : data.totals.roas >= 1 ? "text-blue-400" : "text-red-400"}>
                   {data.totals.roas.toFixed(2)}x
                 </span>
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="p-3">
-              <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Cost/Purchase</div>
-              <div className="text-lg font-bold mt-0.5" data-testid="text-total-cpa">{formatCurrency(data.totals.costPerPurchase)}</div>
+              <div className="text-[10px] text-white/40 font-medium uppercase tracking-wider">Cost/Purchase</div>
+              <div className="text-lg font-bold mt-0.5 text-white/90" data-testid="text-total-cpa">{formatCurrency(data.totals.costPerPurchase)}</div>
             </CardContent>
           </Card>
         </div>
@@ -596,21 +600,21 @@ export default function AdsManager() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-muted/30">
+                    <TableRow className="bg-white/[0.04] border-b border-white/[0.06]">
                       {activeColumns.map(col => (
                         <TableHead
                           key={col.key}
-                          className={`text-[11px] font-semibold uppercase tracking-wider cursor-pointer hover:bg-muted/50 select-none whitespace-nowrap ${col.width || ""} ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : ""}`}
+                          className={`text-[11px] font-semibold uppercase tracking-wider cursor-pointer hover:bg-white/[0.04] select-none whitespace-nowrap ${col.width || ""} ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : ""} ${sortBy === col.key ? "text-white/90" : "text-white/40"}`}
                           onClick={() => col.sortable && toggleSort(col.key)}
                           data-testid={`th-${col.key}`}
                         >
                           <div className={`flex items-center gap-1 ${col.align === "right" ? "justify-end" : col.align === "center" ? "justify-center" : ""}`}>
                             {col.label}
                             {col.sortable && sortBy === col.key && (
-                              sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                              sortDir === "asc" ? <ChevronUp className="w-3 h-3 text-blue-400" /> : <ChevronDown className="w-3 h-3 text-blue-400" />
                             )}
                             {col.sortable && sortBy !== col.key && (
-                              <ArrowUpDown className="w-3 h-3 opacity-30" />
+                              <ArrowUpDown className="w-3 h-3 opacity-20" />
                             )}
                           </div>
                         </TableHead>
@@ -619,7 +623,7 @@ export default function AdsManager() {
                   </TableHeader>
                   <TableBody>
                     {paginatedRows.map((row: any, i: number) => (
-                      <TableRow key={row.entityId || i} className="hover:bg-muted/20" data-testid={`row-${level}-${i}`}>
+                      <TableRow key={row.entityId || i} className={`hover:bg-blue-500/[0.06] border-b border-white/[0.04] ${i % 2 === 1 ? "bg-white/[0.02]" : ""}`} data-testid={`row-${level}-${i}`}>
                         {activeColumns.map(col => (
                           <TableCell
                             key={col.key}
@@ -650,7 +654,7 @@ export default function AdsManager() {
                       </TableRow>
                     ))}
 
-                    <TableRow className="bg-muted/40 font-semibold border-t-2" data-testid="row-totals">
+                    <TableRow className="bg-white/[0.04] font-semibold border-t border-white/[0.08]" data-testid="row-totals">
                       {activeColumns.map(col => (
                         <TableCell
                           key={col.key}
@@ -679,8 +683,8 @@ export default function AdsManager() {
               </div>
 
               {totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t">
-                  <span className="text-xs text-muted-foreground">
+                <div className="flex items-center justify-between px-4 py-3 border-t border-white/[0.06] bg-white/[0.02]">
+                  <span className="text-xs text-white/40">
                     Showing {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, sortedRows.length)} of {sortedRows.length}
                   </span>
                   <div className="flex items-center gap-1">
@@ -689,18 +693,20 @@ export default function AdsManager() {
                       size="icon"
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
+                      className="border-white/10 text-white/50 hover:bg-white/[0.06]"
                       data-testid="button-prev-page"
                     >
                       <ChevronLeft className="w-3.5 h-3.5" />
                     </Button>
-                    <span className="text-xs px-2">
-                      Page {currentPage} of {totalPages}
+                    <span className="text-xs px-2 text-blue-400 font-medium">
+                      {currentPage} / {totalPages}
                     </span>
                     <Button
                       variant="outline"
                       size="icon"
                       onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                       disabled={currentPage === totalPages}
+                      className="border-white/10 text-white/50 hover:bg-white/[0.06]"
                       data-testid="button-next-page"
                     >
                       <ChevronRight className="w-3.5 h-3.5" />
