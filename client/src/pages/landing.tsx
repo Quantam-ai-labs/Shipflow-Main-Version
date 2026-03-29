@@ -1,23 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { motion, useInView, useAnimation, AnimatePresence } from "framer-motion";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { motion, useInView, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
 import {
   Package,
   Truck,
-  BarChart3,
-  ShieldCheck,
   Zap,
   ArrowRight,
   CheckCircle2,
   MessageSquare,
-  Phone,
   Target,
   Brain,
-  BookOpen,
   ChevronRight,
   Menu,
   X,
@@ -34,7 +26,6 @@ import {
   Store,
   Send,
   Sparkles,
-  CircleDot,
   ArrowDown,
 } from "lucide-react";
 
@@ -63,11 +54,6 @@ const fadeUp = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
 };
 
-const fadeIn = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0.5 } },
-};
-
 const staggerContainer = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.1 } },
@@ -91,6 +77,62 @@ function AnimatedSection({ children, className = "" }: { children: React.ReactNo
     >
       {children}
     </motion.div>
+  );
+}
+
+function StarField() {
+  const stars = useRef<{ x: number; y: number; r: number; opacity: number; speed: number }[]>([]);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    stars.current = Array.from({ length: 120 }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      r: Math.random() * 1.2 + 0.3,
+      opacity: Math.random() * 0.6 + 0.1,
+      speed: Math.random() * 0.015 + 0.005,
+    }));
+
+    let time = 0;
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      time += 1;
+      stars.current.forEach((star) => {
+        const twinkle = star.opacity + Math.sin(time * star.speed * 3) * 0.25;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${Math.max(0.05, Math.min(0.85, twinkle))})`;
+        ctx.fill();
+      });
+      animRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 pointer-events-none"
+      style={{ zIndex: 0 }}
+    />
   );
 }
 
@@ -126,23 +168,23 @@ function OrderPipelineAnimation() {
               <motion.div
                 animate={{
                   scale: i === activeStage ? 1.15 : 1,
-                  opacity: isActive ? 1 : 0.4,
+                  opacity: isActive ? 1 : 0.35,
                 }}
                 transition={{ duration: 0.4 }}
-                className={`flex flex-col items-center gap-1.5 flex-1`}
+                className="flex flex-col items-center gap-1.5 flex-1"
               >
-                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full ${isActive ? stage.color : "bg-muted"} flex items-center justify-center transition-colors duration-300`}>
+                <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full ${isActive ? stage.color : "bg-white/10"} flex items-center justify-center transition-colors duration-300`}>
                   <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                 </div>
-                <span className={`text-[10px] sm:text-xs font-medium ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
+                <span className={`text-[10px] sm:text-xs font-medium ${isActive ? "text-white" : "text-white/40"}`}>
                   {stage.label}
                 </span>
               </motion.div>
               {i < pipelineStages.length - 1 && (
                 <motion.div
-                  animate={{ scaleX: i < activeStage ? 1 : 0, opacity: i < activeStage ? 1 : 0.3 }}
+                  animate={{ scaleX: i < activeStage ? 1 : 0, opacity: i < activeStage ? 1 : 0.2 }}
                   transition={{ duration: 0.5 }}
-                  className="h-0.5 flex-1 bg-primary origin-left mb-5"
+                  className="h-0.5 flex-1 bg-emerald-400 origin-left mb-5"
                 />
               )}
             </div>
@@ -163,20 +205,20 @@ function OrderPipelineAnimation() {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 + i * 0.15 }}
-            className="flex items-center justify-between p-3 rounded-lg border bg-background/80"
+            className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
           >
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                <Package className="w-4 h-4 text-primary" />
+              <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                <Package className="w-4 h-4 text-emerald-400" />
               </div>
               <div>
-                <p className="text-sm font-medium">{item.order}</p>
-                <p className="text-xs text-muted-foreground">{item.from} → {item.to}</p>
+                <p className="text-sm font-medium text-white">{item.order}</p>
+                <p className="text-xs text-white/50">{item.from} → {item.to}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">{item.amount}</span>
-              <Badge variant="secondary" className="text-[10px]">{item.status}</Badge>
+              <span className="text-xs font-medium text-white/50">{item.amount}</span>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">{item.status}</span>
             </div>
           </motion.div>
         ))}
@@ -209,7 +251,7 @@ function WhatsAppAnimation() {
 
   return (
     <div ref={ref} className="space-y-4">
-      <div className="bg-[#075e54] dark:bg-[#1a3a34] rounded-t-xl p-3 flex items-center gap-3">
+      <div className="bg-[#075e54] rounded-t-xl p-3 flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
           <MessageSquare className="w-4 h-4 text-white" />
         </div>
@@ -218,7 +260,7 @@ function WhatsAppAnimation() {
           <p className="text-white/60 text-xs">online</p>
         </div>
       </div>
-      <div className="bg-[#ece5dd] dark:bg-muted/30 rounded-b-xl p-4 space-y-3 min-h-[200px]">
+      <div className="bg-[#1a1a2e] rounded-b-xl p-4 space-y-3 min-h-[200px]">
         <AnimatePresence>
           {messages.map((msg, i) =>
             step > i ? (
@@ -231,8 +273,8 @@ function WhatsAppAnimation() {
               >
                 <div className={`max-w-[80%] p-2.5 rounded-lg text-sm ${
                   msg.sender === "user"
-                    ? "bg-[#dcf8c6] dark:bg-emerald-900/50 text-foreground"
-                    : "bg-white dark:bg-muted text-foreground"
+                    ? "bg-emerald-600/80 text-white"
+                    : "bg-white/10 text-white/90"
                 }`}>
                   {msg.text}
                 </div>
@@ -246,9 +288,9 @@ function WhatsAppAnimation() {
             animate={{ opacity: 1, scale: 1 }}
             className="flex justify-center"
           >
-            <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-              <CheckCircle2 className="w-3 h-3 mr-1" /> Auto-confirmed
-            </Badge>
+            <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs px-3 py-1 rounded-full flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" /> Auto-confirmed
+            </span>
           </motion.div>
         )}
       </div>
@@ -256,14 +298,14 @@ function WhatsAppAnimation() {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-3 p-3 rounded-lg border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800"
+          className="flex items-center gap-3 p-3 rounded-lg border border-amber-500/20 bg-amber-500/10"
         >
-          <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
-            <PhoneCall className="w-5 h-5 text-amber-600" />
+          <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+            <PhoneCall className="w-5 h-5 text-amber-400" />
           </div>
           <div className="flex-1">
-            <p className="text-sm font-medium">RoboCall Backup</p>
-            <p className="text-xs text-muted-foreground">No reply? Auto-dial customer with IVR confirmation</p>
+            <p className="text-sm font-medium text-white">RoboCall Backup</p>
+            <p className="text-xs text-white/50">No reply? Auto-dial customer with IVR confirmation</p>
           </div>
           <div className="flex gap-1">
             {[0, 1, 2, 3, 4].map((i) => (
@@ -271,7 +313,7 @@ function WhatsAppAnimation() {
                 key={i}
                 animate={{ scaleY: [0.3, 1, 0.3] }}
                 transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }}
-                className="w-1 h-6 bg-amber-500 rounded-full"
+                className="w-1 h-6 bg-amber-400 rounded-full"
               />
             ))}
           </div>
@@ -306,7 +348,7 @@ function CourierTrackingAnimation() {
             <div className={`w-12 h-12 rounded-xl ${c.color} flex items-center justify-center text-white font-bold text-lg`}>
               {c.initial}
             </div>
-            <span className="text-xs font-medium text-muted-foreground">{c.name}</span>
+            <span className="text-xs font-medium text-white/50">{c.name}</span>
           </motion.div>
         ))}
       </div>
@@ -323,30 +365,30 @@ function CourierTrackingAnimation() {
                 key={i}
                 animate={{ opacity: [0.3, 1, 0.3] }}
                 transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
-                className="w-8 h-0.5 bg-primary"
+                className="w-8 h-0.5 bg-violet-400"
               />
             ))}
           </div>
-          <div className="border rounded-lg p-4 bg-background">
+          <div className="rounded-lg p-4 bg-white/5 border border-white/10">
             <div className="flex items-center gap-2 mb-3">
-              <Globe className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium">Unified Tracking Dashboard</span>
+              <Globe className="w-4 h-4 text-violet-400" />
+              <span className="text-sm font-medium text-white">Unified Tracking Dashboard</span>
             </div>
             <div className="grid grid-cols-3 gap-3">
               {[
-                { label: "In Transit", value: "124", color: "text-amber-600" },
-                { label: "Delivered", value: "892", color: "text-green-600" },
-                { label: "Returns", value: "31", color: "text-red-500" },
+                { label: "In Transit", value: "124", color: "text-amber-400" },
+                { label: "Delivered", value: "892", color: "text-emerald-400" },
+                { label: "Returns", value: "31", color: "text-red-400" },
               ].map((stat, i) => (
                 <motion.div
                   key={stat.label}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 1.2 + i * 0.15 }}
-                  className="text-center p-2 rounded-md bg-muted/50"
+                  className="text-center p-2 rounded-md bg-white/5"
                 >
                   <p className={`text-lg font-bold ${stat.color}`}>{stat.value}</p>
-                  <p className="text-[10px] text-muted-foreground">{stat.label}</p>
+                  <p className="text-[10px] text-white/40">{stat.label}</p>
                 </motion.div>
               ))}
             </div>
@@ -393,10 +435,10 @@ function MetaAdsAnimation() {
               transition={{ duration: 0.4 }}
               className="text-center"
             >
-              <div className={`w-10 h-10 mx-auto rounded-lg flex items-center justify-center mb-1.5 ${isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+              <div className={`w-10 h-10 mx-auto rounded-lg flex items-center justify-center mb-1.5 ${isActive ? "bg-violet-500 text-white" : "bg-white/10 text-white/40"}`}>
                 <Icon className="w-5 h-5" />
               </div>
-              <p className="text-[10px] font-medium">{s.label}</p>
+              <p className="text-[10px] font-medium text-white/70">{s.label}</p>
             </motion.div>
           );
         })}
@@ -405,11 +447,11 @@ function MetaAdsAnimation() {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="border rounded-lg p-4 bg-background"
+          className="rounded-lg p-4 bg-white/5 border border-white/10"
         >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium">Campaign Performance</span>
-            <Badge variant="secondary" className="text-[10px]">Live</Badge>
+            <span className="text-sm font-medium text-white">Campaign Performance</span>
+            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">Live</span>
           </div>
           <div className="grid grid-cols-3 gap-2">
             {[
@@ -422,10 +464,10 @@ function MetaAdsAnimation() {
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: i * 0.1 }}
-                className="text-center p-2 rounded bg-muted/50"
+                className="text-center p-2 rounded bg-white/5"
               >
-                <p className="text-sm font-bold text-primary">{m.value}</p>
-                <p className="text-[10px] text-muted-foreground">{m.label}</p>
+                <p className="text-sm font-bold text-violet-300">{m.value}</p>
+                <p className="text-[10px] text-white/40">{m.label}</p>
               </motion.div>
             ))}
           </div>
@@ -458,12 +500,12 @@ function AIAnimation() {
 
   return (
     <div ref={ref} className="space-y-3">
-      <div className="flex items-center gap-2 p-3 rounded-t-xl bg-primary/5 border border-b-0">
-        <Bot className="w-5 h-5 text-primary" />
-        <span className="text-sm font-medium">AI Business Assistant</span>
-        <Sparkles className="w-3 h-3 text-primary ml-auto" />
+      <div className="flex items-center gap-2 p-3 rounded-t-xl bg-violet-500/10 border border-violet-500/20 border-b-0">
+        <Bot className="w-5 h-5 text-violet-400" />
+        <span className="text-sm font-medium text-white">AI Business Assistant</span>
+        <Sparkles className="w-3 h-3 text-violet-400 ml-auto" />
       </div>
-      <div className="border rounded-b-xl p-4 space-y-3 min-h-[160px]">
+      <div className="border border-violet-500/20 rounded-b-xl p-4 space-y-3 min-h-[160px] bg-white/5">
         {chatMessages.map((msg, i) =>
           visibleMessages > i ? (
             <motion.div
@@ -475,8 +517,8 @@ function AIAnimation() {
             >
               <div className={`max-w-[85%] p-2.5 rounded-lg text-sm ${
                 msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted"
+                  ? "bg-violet-600 text-white"
+                  : "bg-white/10 text-white/90"
               }`}>
                 {msg.text}
               </div>
@@ -494,7 +536,7 @@ function AIAnimation() {
                 key={i}
                 animate={{ opacity: [0.3, 1, 0.3] }}
                 transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
-                className="w-2 h-2 rounded-full bg-primary"
+                className="w-2 h-2 rounded-full bg-violet-400"
               />
             ))}
           </motion.div>
@@ -523,19 +565,19 @@ function AccountingAnimation() {
     <div ref={ref} className="space-y-4">
       <div className="grid grid-cols-3 gap-2">
         {[
-          { label: "COD Collected", value: "PKR 485K", icon: DollarSign, color: "text-green-600" },
-          { label: "Courier Fees", value: "PKR 14.5K", icon: Truck, color: "text-amber-600" },
-          { label: "Net Receivable", value: "PKR 470K", icon: Receipt, color: "text-primary" },
+          { label: "COD Collected", value: "PKR 485K", icon: DollarSign, color: "text-emerald-400" },
+          { label: "Courier Fees", value: "PKR 14.5K", icon: Truck, color: "text-amber-400" },
+          { label: "Net Receivable", value: "PKR 470K", icon: Receipt, color: "text-violet-400" },
         ].map((item, i) => (
           <motion.div
             key={item.label}
             animate={{ opacity: step > 0 ? 1 : 0.3, y: step > 0 ? 0 : 10 }}
             transition={{ delay: i * 0.15, duration: 0.4 }}
-            className="p-3 rounded-lg border bg-background text-center"
+            className="p-3 rounded-lg border border-white/10 bg-white/5 text-center"
           >
             <item.icon className={`w-5 h-5 mx-auto mb-1 ${item.color}`} />
             <p className={`text-sm font-bold ${item.color}`}>{item.value}</p>
-            <p className="text-[10px] text-muted-foreground">{item.label}</p>
+            <p className="text-[10px] text-white/40">{item.label}</p>
           </motion.div>
         ))}
       </div>
@@ -547,19 +589,19 @@ function AccountingAnimation() {
           className="space-y-2"
         >
           {[
-            { courier: "Leopards", amount: "PKR 185K", status: "Reconciled", statusColor: "text-green-600" },
-            { courier: "PostEx", amount: "PKR 220K", status: "Pending", statusColor: "text-amber-600" },
-            { courier: "TCS", amount: "PKR 80K", status: "Reconciled", statusColor: "text-green-600" },
+            { courier: "Leopards", amount: "PKR 185K", status: "Reconciled", statusColor: "text-emerald-400" },
+            { courier: "PostEx", amount: "PKR 220K", status: "Pending", statusColor: "text-amber-400" },
+            { courier: "TCS", amount: "PKR 80K", status: "Reconciled", statusColor: "text-emerald-400" },
           ].map((row, i) => (
             <motion.div
               key={row.courier}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.1 }}
-              className="flex items-center justify-between p-2.5 rounded border bg-background/80"
+              className="flex items-center justify-between p-2.5 rounded border border-white/10 bg-white/5"
             >
-              <span className="text-sm font-medium">{row.courier}</span>
-              <span className="text-sm">{row.amount}</span>
+              <span className="text-sm font-medium text-white">{row.courier}</span>
+              <span className="text-sm text-white/60">{row.amount}</span>
               <span className={`text-xs font-medium ${row.statusColor}`}>{row.status}</span>
             </motion.div>
           ))}
@@ -569,12 +611,12 @@ function AccountingAnimation() {
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800"
+          className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20"
         >
-          <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
           <div>
-            <p className="text-sm font-medium text-green-700 dark:text-green-400">P&L Report Generated</p>
-            <p className="text-xs text-green-600/70 dark:text-green-400/70">Revenue: PKR 2.1M | Profit: PKR 485K | Margin: 23%</p>
+            <p className="text-sm font-medium text-emerald-300">P&L Report Generated</p>
+            <p className="text-xs text-emerald-400/70">Revenue: PKR 2.1M | Profit: PKR 485K | Margin: 23%</p>
           </div>
         </motion.div>
       )}
@@ -590,7 +632,7 @@ const integrations = [
   { name: "PostEx", color: "bg-blue-600", icon: Package },
   { name: "TCS", color: "bg-red-600", icon: Truck },
   { name: "OpenAI", color: "bg-[#10a37f]", icon: Brain },
-  { name: "Resend", color: "bg-[#000]", icon: Send },
+  { name: "Resend", color: "bg-slate-700", icon: Send },
 ];
 
 function IntegrationSlider() {
@@ -614,12 +656,12 @@ function IntegrationSlider() {
           return (
             <div
               key={`${item.name}-${i}`}
-              className="flex items-center gap-3 px-6 py-3 rounded-xl border bg-background hover:border-primary/30 transition-colors group cursor-default"
+              className="flex items-center gap-3 px-6 py-3 rounded-xl border border-white/10 bg-white/5 hover:border-violet-500/40 hover:bg-white/8 transition-colors group cursor-default"
             >
               <div className={`w-10 h-10 rounded-lg ${item.color} flex items-center justify-center`}>
                 <Icon className="w-5 h-5 text-white" />
               </div>
-              <span className="font-medium text-sm whitespace-nowrap group-hover:text-primary transition-colors">{item.name}</span>
+              <span className="font-medium text-sm whitespace-nowrap text-white/80 group-hover:text-white transition-colors">{item.name}</span>
             </div>
           );
         })}
@@ -662,13 +704,13 @@ function VisualFlowChart() {
               transition={{ delay: i * 0.12, duration: 0.4 }}
               className="relative group"
             >
-              <div className="flex flex-col items-center text-center p-4 rounded-xl border bg-background hover:border-primary/40 transition-all">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
-                  <Icon className="w-6 h-6 text-primary" />
+              <div className="flex flex-col items-center text-center p-4 rounded-xl border border-white/10 bg-white/5 hover:border-violet-500/40 hover:bg-white/8 transition-all">
+                <div className="w-12 h-12 rounded-xl bg-violet-500/15 flex items-center justify-center mb-3 group-hover:bg-violet-500/25 transition-colors">
+                  <Icon className="w-6 h-6 text-violet-400" />
                 </div>
-                <span className="text-xs font-semibold mb-0.5">{step.label}</span>
-                <span className="text-[10px] text-muted-foreground">{step.desc}</span>
-                <div className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold">
+                <span className="text-xs font-semibold mb-0.5 text-white">{step.label}</span>
+                <span className="text-[10px] text-white/40">{step.desc}</span>
+                <div className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-violet-600 text-white flex items-center justify-center text-[10px] font-bold">
                   {i + 1}
                 </div>
               </div>
@@ -677,7 +719,7 @@ function VisualFlowChart() {
                   initial={{ scaleX: 0 }}
                   animate={isInView ? { scaleX: 1 } : {}}
                   transition={{ delay: i * 0.12 + 0.3, duration: 0.3 }}
-                  className="hidden sm:block absolute top-1/2 -right-3 sm:-right-4 w-4 sm:w-6 h-0.5 bg-primary/30 origin-left"
+                  className="hidden sm:block absolute top-1/2 -right-3 sm:-right-4 w-4 sm:w-6 h-0.5 bg-violet-500/30 origin-left"
                 />
               )}
             </motion.div>
@@ -696,6 +738,7 @@ const featureSections = [
     description: "From Shopify sync to delivery confirmation — manage every order through a visual pipeline with real-time status updates across all stages.",
     animation: OrderPipelineAnimation,
     reverse: false,
+    accent: "from-emerald-500/20 to-teal-500/5",
   },
   {
     id: "whatsapp",
@@ -704,6 +747,7 @@ const featureSections = [
     description: "Confirm orders instantly via WhatsApp messages. If no reply, the system auto-triggers robocalls with IVR for confirmation — reducing fake orders by up to 40%.",
     animation: WhatsAppAnimation,
     reverse: true,
+    accent: "from-green-500/20 to-emerald-500/5",
   },
   {
     id: "couriers",
@@ -712,6 +756,7 @@ const featureSections = [
     description: "Connect Leopards, PostEx, TCS, M&P and more. Track all shipments from a single dashboard with real-time status sync and bulk booking.",
     animation: CourierTrackingAnimation,
     reverse: false,
+    accent: "from-violet-500/20 to-purple-500/5",
   },
   {
     id: "ads",
@@ -720,6 +765,7 @@ const featureSections = [
     description: "Create Facebook and Instagram campaigns directly from 1SOL. Target Pakistani cities, upload creatives, launch ads, and track ROAS — all in one place.",
     animation: MetaAdsAnimation,
     reverse: true,
+    accent: "from-blue-500/20 to-indigo-500/5",
   },
   {
     id: "ai",
@@ -728,6 +774,7 @@ const featureSections = [
     description: "Ask questions about your business and get instant answers. AI analyzes orders, revenue, returns, courier performance, and more to give you actionable insights.",
     animation: AIAnimation,
     reverse: false,
+    accent: "from-purple-500/20 to-violet-500/5",
   },
   {
     id: "accounting",
@@ -736,6 +783,7 @@ const featureSections = [
     description: "Track COD collections, reconcile courier payments, manage expenses, and generate P&L reports. Complete double-entry accounting built for e-commerce.",
     animation: AccountingAnimation,
     reverse: true,
+    accent: "from-pink-500/20 to-rose-500/5",
   },
 ];
 
@@ -750,46 +798,51 @@ export default function Landing() {
   const deliveryRate = useCountUp(94, 1600, statsInView);
 
   return (
-    <div className="min-h-screen bg-background" data-testid="landing-page">
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background/95 backdrop-blur-sm">
+    <div
+      className="min-h-screen"
+      style={{ background: "#08080f", color: "#fff" }}
+      data-testid="landing-page"
+    >
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/8 bg-[#08080f]/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 gap-4">
             <Link href="/">
               <div className="flex items-center gap-2 cursor-pointer" data-testid="link-logo">
-                <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-                  <Package className="w-5 h-5 text-primary-foreground" />
+                <div className="w-8 h-8 rounded-md bg-gradient-to-br from-violet-500 to-emerald-500 flex items-center justify-center">
+                  <Package className="w-5 h-5 text-white" />
                 </div>
-                <span className="font-bold text-xl">1SOL.AI</span>
+                <span className="font-bold text-xl text-white">1SOL.AI</span>
               </div>
             </Link>
             <div className="hidden md:flex items-center gap-8">
-              <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium" data-testid="link-features">
+              <a href="#features" className="text-white/50 hover:text-white transition-colors text-sm font-medium" data-testid="link-features">
                 Features
               </a>
-              <a href="#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium" data-testid="link-how-it-works">
+              <a href="#how-it-works" className="text-white/50 hover:text-white transition-colors text-sm font-medium" data-testid="link-how-it-works">
                 How it Works
               </a>
               <Link href="/pricing">
-                <span className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium cursor-pointer" data-testid="link-pricing">
+                <span className="text-white/50 hover:text-white transition-colors text-sm font-medium cursor-pointer" data-testid="link-pricing">
                   Pricing
                 </span>
               </Link>
               <Link href="/contact">
-                <span className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium cursor-pointer" data-testid="link-contact">
+                <span className="text-white/50 hover:text-white transition-colors text-sm font-medium cursor-pointer" data-testid="link-contact">
                   Contact
                 </span>
               </Link>
             </div>
             <div className="flex items-center gap-3">
-              <ThemeToggle />
-              <a href="/auth">
-                <Button data-testid="button-login" size="sm">
+              <a href="/auth" className="hidden md:block">
+                <button
+                  data-testid="button-login"
+                  className="px-4 py-2 rounded-full text-sm font-semibold bg-gradient-to-r from-violet-600 to-emerald-500 text-white hover:opacity-90 transition-opacity"
+                >
                   Get Started
-                  <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
+                </button>
               </a>
               <button
-                className="md:hidden p-2"
+                className="md:hidden p-2 text-white/70 hover:text-white"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 data-testid="button-mobile-menu"
               >
@@ -804,136 +857,238 @@ export default function Landing() {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="md:hidden border-t bg-background overflow-hidden"
+              className="md:hidden border-t border-white/8 bg-[#0d0d1a] overflow-hidden"
             >
               <div className="px-4 py-4 space-y-3">
-                <a href="#features" className="block text-sm font-medium text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>Features</a>
-                <a href="#how-it-works" className="block text-sm font-medium text-muted-foreground hover:text-foreground" onClick={() => setMobileMenuOpen(false)}>How it Works</a>
-                <Link href="/pricing"><span className="block text-sm font-medium text-muted-foreground hover:text-foreground cursor-pointer" onClick={() => setMobileMenuOpen(false)}>Pricing</span></Link>
-                <Link href="/contact"><span className="block text-sm font-medium text-muted-foreground hover:text-foreground cursor-pointer" onClick={() => setMobileMenuOpen(false)}>Contact</span></Link>
+                <a href="#features" className="block text-sm font-medium text-white/60 hover:text-white" onClick={() => setMobileMenuOpen(false)}>Features</a>
+                <a href="#how-it-works" className="block text-sm font-medium text-white/60 hover:text-white" onClick={() => setMobileMenuOpen(false)}>How it Works</a>
+                <Link href="/pricing"><span className="block text-sm font-medium text-white/60 hover:text-white cursor-pointer" onClick={() => setMobileMenuOpen(false)}>Pricing</span></Link>
+                <Link href="/contact"><span className="block text-sm font-medium text-white/60 hover:text-white cursor-pointer" onClick={() => setMobileMenuOpen(false)}>Contact</span></Link>
+                <a href="/auth" className="block">
+                  <button className="w-full mt-2 px-4 py-2 rounded-full text-sm font-semibold bg-gradient-to-r from-violet-600 to-emerald-500 text-white">
+                    Get Started
+                  </button>
+                </a>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </nav>
 
-      <section className="pt-28 sm:pt-32 pb-16 sm:pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
+      {/* ── HERO ── */}
+      <section className="relative pt-28 sm:pt-36 pb-20 sm:pb-28 px-4 sm:px-6 lg:px-8 overflow-hidden min-h-screen flex flex-col justify-center">
+        <StarField />
+
+        {/* Aurora orbs */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div
+            className="absolute bottom-[-10%] left-1/2 -translate-x-1/2 w-[90vw] h-[50vh] rounded-full blur-[140px] opacity-30"
+            style={{ background: "radial-gradient(ellipse, #4f46e5 0%, #10b981 40%, transparent 70%)" }}
+          />
+          <div
+            className="absolute bottom-[-5%] left-[20%] w-[40vw] h-[30vh] rounded-full blur-[100px] opacity-20"
+            style={{ background: "radial-gradient(ellipse, #ec4899 0%, transparent 70%)" }}
+          />
+          <div
+            className="absolute bottom-[-5%] right-[15%] w-[35vw] h-[25vh] rounded-full blur-[100px] opacity-20"
+            style={{ background: "radial-gradient(ellipse, #f59e0b 0%, transparent 70%)" }}
+          />
+        </div>
+
+        <div className="relative z-10 max-w-7xl mx-auto w-full">
+          <div className="text-center max-w-4xl mx-auto mb-16">
             <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.7 }}
-              className="space-y-8"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="mb-6 inline-block"
             >
-              <div className="space-y-5">
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                  <Badge variant="secondary" className="px-4 py-1.5">
-                    <Zap className="w-3 h-3 mr-1" />
-                    Built for Pakistani Merchants
-                  </Badge>
-                </motion.div>
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.1]">
-                  <motion.span
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3, duration: 0.6 }}
-                    className="block"
-                  >
-                    Your Complete
-                  </motion.span>
-                  <motion.span
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.45, duration: 0.6 }}
-                    className="block text-primary"
-                  >
-                    E-Commerce OS
-                  </motion.span>
-                </h1>
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.6 }}
-                  className="text-lg text-muted-foreground max-w-xl"
+              <span className="px-4 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 text-sm font-medium flex items-center gap-2">
+                <Zap className="w-3.5 h-3.5" />
+                Built for Pakistani E-Commerce Merchants
+              </span>
+            </motion.div>
+
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25, duration: 0.7 }}
+              className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight leading-[1.08] mb-6"
+            >
+              <span className="text-white">One platform to run</span>
+              <br />
+              <span
+                className="bg-clip-text text-transparent"
+                style={{ backgroundImage: "linear-gradient(90deg, #a78bfa 0%, #34d399 60%, #f59e0b 100%)" }}
+              >
+                your entire operation
+              </span>
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="text-lg sm:text-xl text-white/55 max-w-2xl mx-auto mb-10"
+            >
+              Orders, couriers, WhatsApp confirmations, Meta Ads, AI insights, and accounting — all unified in one powerful platform.
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.65 }}
+              className="flex flex-col sm:flex-row gap-4 justify-center mb-10"
+            >
+              <a href="/auth">
+                <button
+                  data-testid="button-hero-cta"
+                  className="px-7 py-3.5 rounded-full text-base font-semibold bg-gradient-to-r from-violet-600 to-emerald-500 text-white hover:opacity-90 transition-opacity flex items-center gap-2"
                 >
-                  Orders, couriers, WhatsApp confirmations, Meta Ads, AI insights, and accounting — all unified in one platform designed for Shopify merchants in Pakistan.
-                </motion.p>
-              </div>
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.75 }}
-                className="flex flex-col sm:flex-row gap-4"
-              >
-                <a href="/auth">
-                  <Button size="lg" className="w-full sm:w-auto" data-testid="button-hero-cta">
-                    Start Free Trial
-                    <ArrowRight className="w-4 h-4 ml-2" />
-                  </Button>
-                </a>
-                <a href="#features">
-                  <Button size="lg" variant="outline" className="w-full sm:w-auto" data-testid="button-explore">
-                    Explore Features
-                    <ArrowDown className="w-4 h-4 ml-2" />
-                  </Button>
-                </a>
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.9 }}
-                className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground"
-              >
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-primary" />
-                  <span>Free forever plan</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-primary" />
-                  <span>No credit card required</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-primary" />
-                  <span>Setup in 5 minutes</span>
-                </div>
-              </motion.div>
+                  Start Free Trial
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </a>
+              <a href="#features">
+                <button
+                  data-testid="button-explore"
+                  className="px-7 py-3.5 rounded-full text-base font-semibold border border-white/15 bg-white/5 text-white hover:bg-white/10 transition-colors flex items-center gap-2"
+                >
+                  Explore Features
+                  <ArrowDown className="w-4 h-4" />
+                </button>
+              </a>
             </motion.div>
 
             <motion.div
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.7, delay: 0.3 }}
-              className="relative"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.8 }}
+              className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-white/40"
             >
-              <Card className="relative border overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="bg-muted/30 p-3 border-b flex items-center gap-2">
-                    <div className="flex gap-1.5">
-                      <div className="w-3 h-3 rounded-full bg-red-400" />
-                      <div className="w-3 h-3 rounded-full bg-amber-400" />
-                      <div className="w-3 h-3 rounded-full bg-green-400" />
-                    </div>
-                    <span className="text-xs text-muted-foreground ml-2">1SOL.AI Dashboard</span>
-                  </div>
-                  <div className="p-6">
-                    <OrderPipelineAnimation />
-                  </div>
-                </CardContent>
-              </Card>
+              {["Free forever plan", "No credit card required", "Setup in 5 minutes"].map((t) => (
+                <div key={t} className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>{t}</span>
+                </div>
+              ))}
             </motion.div>
           </div>
+
+          {/* Floating glass cards */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.9, duration: 0.8 }}
+            className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto"
+          >
+            {/* Order card */}
+            <div
+              className="rounded-2xl border border-white/10 p-5 relative overflow-hidden"
+              style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(16px)" }}
+            >
+              <div className="absolute inset-0 rounded-2xl" style={{ background: "linear-gradient(135deg, rgba(79,70,229,0.15) 0%, transparent 60%)" }} />
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                    <Package className="w-4 h-4 text-violet-400" />
+                  </div>
+                  <span className="text-sm font-semibold text-white">Order Pipeline</span>
+                  <span className="ml-auto text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded-full">Live</span>
+                </div>
+                <div className="text-3xl font-bold text-white mb-1">1,247</div>
+                <div className="text-xs text-white/40">Active orders today</div>
+                <div className="mt-3 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: "72%" }}
+                    transition={{ delay: 1.2, duration: 1 }}
+                    className="h-full rounded-full bg-gradient-to-r from-violet-500 to-emerald-400"
+                  />
+                </div>
+                <div className="text-[10px] text-white/30 mt-1">72% delivered</div>
+              </div>
+            </div>
+
+            {/* WhatsApp confirmation badge */}
+            <div
+              className="rounded-2xl border border-white/10 p-5 relative overflow-hidden"
+              style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(16px)" }}
+            >
+              <div className="absolute inset-0 rounded-2xl" style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.15) 0%, transparent 60%)" }} />
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                    <MessageSquare className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <span className="text-sm font-semibold text-white">WhatsApp Bot</span>
+                </div>
+                <div className="text-3xl font-bold text-white mb-1">94%</div>
+                <div className="text-xs text-white/40">Confirmation rate</div>
+                <div className="mt-3 space-y-1.5">
+                  {[
+                    { label: "Confirmed", w: "80%", color: "bg-emerald-400" },
+                    { label: "Pending", w: "14%", color: "bg-amber-400" },
+                    { label: "Cancelled", w: "6%", color: "bg-red-400" },
+                  ].map((bar) => (
+                    <div key={bar.label} className="flex items-center gap-2">
+                      <div className="w-16 text-[10px] text-white/30">{bar.label}</div>
+                      <div className="flex-1 h-1 rounded-full bg-white/10">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: bar.w }}
+                          transition={{ delay: 1.3, duration: 0.8 }}
+                          className={`h-full rounded-full ${bar.color}`}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Delivery stat */}
+            <div
+              className="rounded-2xl border border-white/10 p-5 relative overflow-hidden"
+              style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(16px)" }}
+            >
+              <div className="absolute inset-0 rounded-2xl" style={{ background: "linear-gradient(135deg, rgba(245,158,11,0.15) 0%, transparent 60%)" }} />
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <span className="text-sm font-semibold text-white">ROAS</span>
+                </div>
+                <div className="text-3xl font-bold text-white mb-1">3.2x</div>
+                <div className="text-xs text-white/40">Average return on ad spend</div>
+                <div className="mt-3 flex gap-1 items-end h-10">
+                  {[3, 5, 4, 7, 6, 8, 9].map((h, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ height: 0 }}
+                      animate={{ height: `${h * 10}%` }}
+                      transition={{ delay: 1.2 + i * 0.07, duration: 0.4 }}
+                      className="flex-1 rounded-t-sm bg-gradient-to-t from-amber-500/80 to-amber-300/40"
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
-      <section ref={statsRef} className="py-12 border-y bg-muted/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* ── STATS BAR ── */}
+      <section ref={statsRef} className="py-14 border-y border-white/8 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-emerald-500/5" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {[
-              { label: "Orders Processed", value: ordersCount, suffix: "+", icon: Package },
-              { label: "Active Merchants", value: merchantsCount, suffix: "+", icon: Users },
-              { label: "Cities Covered", value: citiesCount, suffix: "", icon: MapPin },
-              { label: "Delivery Rate", value: deliveryRate, suffix: "%", icon: TrendingUp },
+              { label: "Orders Processed", value: ordersCount, suffix: "+", icon: Package, color: "text-violet-400" },
+              { label: "Active Merchants", value: merchantsCount, suffix: "+", icon: Users, color: "text-emerald-400" },
+              { label: "Cities Covered", value: citiesCount, suffix: "", icon: MapPin, color: "text-amber-400" },
+              { label: "Delivery Rate", value: deliveryRate, suffix: "%", icon: TrendingUp, color: "text-pink-400" },
             ].map((stat) => {
               const Icon = stat.icon;
               return (
@@ -943,12 +1098,12 @@ export default function Landing() {
                   className="text-center"
                 >
                   <div className="flex items-center justify-center gap-2 mb-2">
-                    <Icon className="w-5 h-5 text-primary" />
-                    <span className="text-3xl sm:text-4xl font-bold text-primary">
+                    <Icon className={`w-5 h-5 ${stat.color}`} />
+                    <span className={`text-3xl sm:text-4xl font-bold ${stat.color}`}>
                       {stat.value.toLocaleString()}{stat.suffix}
                     </span>
                   </div>
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
+                  <p className="text-sm text-white/40">{stat.label}</p>
                 </motion.div>
               );
             })}
@@ -956,16 +1111,19 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── FEATURES ── */}
       <section id="features" className="py-20 sm:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16 sm:mb-20">
-            <motion.div variants={fadeUp}>
-              <Badge variant="outline" className="mb-4">Platform Features</Badge>
+            <motion.div variants={fadeUp} className="mb-4">
+              <span className="px-4 py-1.5 rounded-full border border-white/15 bg-white/5 text-white/60 text-sm font-medium">
+                Platform Features
+              </span>
             </motion.div>
-            <motion.h2 variants={fadeUp} className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">
+            <motion.h2 variants={fadeUp} className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4 text-white">
               Everything Your Business Needs
             </motion.h2>
-            <motion.p variants={fadeUp} className="text-muted-foreground max-w-2xl mx-auto text-lg">
+            <motion.p variants={fadeUp} className="text-white/50 max-w-2xl mx-auto text-lg">
               A complete operating system for e-commerce logistics — from first order to final reconciliation.
             </motion.p>
           </AnimatedSection>
@@ -975,30 +1133,41 @@ export default function Landing() {
               const Animation = section.animation;
               return (
                 <AnimatedSection key={section.id}>
-                  <div className={`grid lg:grid-cols-2 gap-12 lg:gap-16 items-center ${section.reverse ? "lg:direction-rtl" : ""}`}>
+                  <div className={`grid lg:grid-cols-2 gap-12 lg:gap-16 items-center`}>
                     <motion.div
                       variants={fadeUp}
                       className={`space-y-6 ${section.reverse ? "lg:order-2" : ""}`}
                     >
-                      <Badge variant="secondary">{section.badge}</Badge>
-                      <h3 className="text-2xl sm:text-3xl font-bold">{section.title}</h3>
-                      <p className="text-muted-foreground leading-relaxed">{section.description}</p>
+                      <span className="px-3 py-1 rounded-full border border-white/15 bg-white/5 text-white/60 text-xs font-medium">
+                        {section.badge}
+                      </span>
+                      <h3 className="text-2xl sm:text-3xl font-bold text-white">{section.title}</h3>
+                      <p className="text-white/50 leading-relaxed">{section.description}</p>
                       <a href="/auth">
-                        <Button variant="outline" className="group" data-testid={`button-feature-${section.id}`}>
+                        <button
+                          data-testid={`button-feature-${section.id}`}
+                          className="group flex items-center gap-2 px-5 py-2.5 rounded-full border border-white/15 bg-white/5 text-sm font-medium text-white hover:bg-white/10 transition-colors"
+                        >
                           Learn More
-                          <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
-                        </Button>
+                          <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                        </button>
                       </a>
                     </motion.div>
                     <motion.div
                       variants={scaleIn}
                       className={`${section.reverse ? "lg:order-1" : ""}`}
                     >
-                      <Card className="border">
-                        <CardContent className="p-6">
+                      <div
+                        className="rounded-2xl border border-white/10 p-6 relative overflow-hidden"
+                        style={{ background: "rgba(255,255,255,0.03)", backdropFilter: "blur(12px)" }}
+                      >
+                        <div
+                          className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${section.accent} pointer-events-none`}
+                        />
+                        <div className="relative z-10">
                           <Animation />
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     </motion.div>
                   </div>
                 </AnimatedSection>
@@ -1008,13 +1177,15 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="py-16 bg-muted/20 border-y">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* ── INTEGRATIONS MARQUEE ── */}
+      <section className="py-16 border-y border-white/8 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-emerald-500/5" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <AnimatedSection className="text-center mb-8">
-            <motion.h2 variants={fadeUp} className="text-2xl sm:text-3xl font-bold mb-3">
+            <motion.h2 variants={fadeUp} className="text-2xl sm:text-3xl font-bold mb-3 text-white">
               Integrations That Power Your Business
             </motion.h2>
-            <motion.p variants={fadeUp} className="text-muted-foreground">
+            <motion.p variants={fadeUp} className="text-white/40">
               Seamlessly connected with the tools you already use
             </motion.p>
           </AnimatedSection>
@@ -1022,16 +1193,19 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── HOW IT WORKS ── */}
       <section id="how-it-works" className="py-20 sm:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <AnimatedSection className="text-center mb-16">
-            <motion.div variants={fadeUp}>
-              <Badge variant="outline" className="mb-4">How It Works</Badge>
+            <motion.div variants={fadeUp} className="mb-4">
+              <span className="px-4 py-1.5 rounded-full border border-white/15 bg-white/5 text-white/60 text-sm font-medium">
+                How It Works
+              </span>
             </motion.div>
-            <motion.h2 variants={fadeUp} className="text-3xl sm:text-4xl font-bold mb-4">
+            <motion.h2 variants={fadeUp} className="text-3xl sm:text-4xl font-bold mb-4 text-white">
               Your Complete E-Commerce Journey
             </motion.h2>
-            <motion.p variants={fadeUp} className="text-muted-foreground max-w-2xl mx-auto">
+            <motion.p variants={fadeUp} className="text-white/40 max-w-2xl mx-auto">
               From connecting your store to AI-powered analytics — every step automated and optimized.
             </motion.p>
           </AnimatedSection>
@@ -1039,23 +1213,34 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="py-20 bg-primary relative overflow-hidden">
+      {/* ── CTA BANNER ── */}
+      <section className="py-24 relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0">
+          <div
+            className="absolute inset-0 opacity-30"
+            style={{ background: "radial-gradient(ellipse at 50% 100%, #4f46e5 0%, #10b981 35%, transparent 70%)" }}
+          />
+          <div
+            className="absolute inset-0 opacity-15"
+            style={{ background: "radial-gradient(ellipse at 20% 80%, #ec4899 0%, transparent 50%)" }}
+          />
+        </div>
         <motion.div
           animate={{ rotate: 360 }}
-          transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
-          className="absolute -top-24 -right-24 w-64 h-64 rounded-full border border-primary-foreground/10"
+          transition={{ duration: 80, repeat: Infinity, ease: "linear" }}
+          className="absolute -top-24 -right-24 w-64 h-64 rounded-full border border-violet-500/10"
         />
         <motion.div
           animate={{ rotate: -360 }}
-          transition={{ duration: 45, repeat: Infinity, ease: "linear" }}
-          className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full border border-primary-foreground/10"
+          transition={{ duration: 55, repeat: Infinity, ease: "linear" }}
+          className="absolute -bottom-16 -left-16 w-48 h-48 rounded-full border border-emerald-500/10"
         />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-3xl sm:text-4xl font-bold text-primary-foreground mb-4"
+            className="text-3xl sm:text-4xl font-bold text-white mb-4"
           >
             Ready to Transform Your Operations?
           </motion.h2>
@@ -1064,7 +1249,7 @@ export default function Landing() {
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2 }}
-            className="text-primary-foreground/80 mb-8 max-w-2xl mx-auto text-lg"
+            className="text-white/50 mb-8 max-w-2xl mx-auto text-lg"
           >
             Join hundreds of Pakistani merchants who have streamlined their logistics with 1SOL.AI.
           </motion.p>
@@ -1076,65 +1261,69 @@ export default function Landing() {
             className="flex flex-col sm:flex-row gap-4 justify-center"
           >
             <a href="/auth">
-              <Button size="lg" variant="secondary" data-testid="button-cta-bottom">
+              <button
+                data-testid="button-cta-bottom"
+                className="px-7 py-3.5 rounded-full text-base font-semibold bg-gradient-to-r from-violet-600 to-emerald-500 text-white hover:opacity-90 transition-opacity flex items-center gap-2"
+              >
                 Get Started Free
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
+                <ArrowRight className="w-4 h-4" />
+              </button>
             </a>
             <Link href="/pricing">
-              <Button size="lg" variant="outline" className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10" data-testid="button-cta-pricing">
+              <button
+                data-testid="button-cta-pricing"
+                className="px-7 py-3.5 rounded-full text-base font-semibold border border-white/15 bg-white/5 text-white hover:bg-white/10 transition-colors"
+              >
                 View Pricing
-              </Button>
+              </button>
             </Link>
           </motion.div>
         </div>
       </section>
 
-      <footer className="py-16 border-t bg-muted/10">
+      {/* ── FOOTER ── */}
+      <footer className="py-16 border-t border-white/8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-                  <Package className="w-5 h-5 text-primary-foreground" />
+                <div className="w-8 h-8 rounded-md bg-gradient-to-br from-violet-500 to-emerald-500 flex items-center justify-center">
+                  <Package className="w-5 h-5 text-white" />
                 </div>
-                <span className="font-bold text-xl">1SOL.AI</span>
+                <span className="font-bold text-xl text-white">1SOL.AI</span>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-white/40">
                 The complete e-commerce operating system for Pakistani merchants.
               </p>
             </div>
             <div>
-              <h4 className="font-semibold text-sm mb-3">Product</h4>
+              <h4 className="font-semibold text-sm mb-3 text-white/70">Product</h4>
               <div className="space-y-2">
-                <a href="#features" className="block text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-features">Features</a>
-                <Link href="/pricing"><span className="block text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer" data-testid="link-footer-pricing">Pricing</span></Link>
-                <a href="#how-it-works" className="block text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-how-it-works">How it Works</a>
+                <a href="#features" className="block text-sm text-white/40 hover:text-white transition-colors" data-testid="link-footer-features">Features</a>
+                <Link href="/pricing"><span className="block text-sm text-white/40 hover:text-white transition-colors cursor-pointer" data-testid="link-footer-pricing">Pricing</span></Link>
+                <a href="#how-it-works" className="block text-sm text-white/40 hover:text-white transition-colors" data-testid="link-footer-how-it-works">How it Works</a>
               </div>
             </div>
             <div>
-              <h4 className="font-semibold text-sm mb-3">Company</h4>
+              <h4 className="font-semibold text-sm mb-3 text-white/70">Company</h4>
               <div className="space-y-2">
-                <Link href="/contact"><span className="block text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer" data-testid="link-footer-contact">Contact</span></Link>
-                <a href="/auth" className="block text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-footer-login">Sign In</a>
+                <Link href="/contact"><span className="block text-sm text-white/40 hover:text-white transition-colors cursor-pointer" data-testid="link-footer-contact">Contact</span></Link>
+                <a href="/auth" className="block text-sm text-white/40 hover:text-white transition-colors" data-testid="link-footer-login">Sign In</a>
               </div>
             </div>
             <div>
-              <h4 className="font-semibold text-sm mb-3">Legal</h4>
+              <h4 className="font-semibold text-sm mb-3 text-white/70">Legal</h4>
               <div className="space-y-2">
-                <Link href="/privacy-policy"><span className="block text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer" data-testid="link-footer-privacy">Privacy Policy</span></Link>
-                <Link href="/terms-of-service"><span className="block text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer" data-testid="link-footer-terms">Terms of Service</span></Link>
-                <Link href="/data-deletion"><span className="block text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer" data-testid="link-footer-data-deletion">Data Deletion</span></Link>
+                <Link href="/privacy-policy"><span className="block text-sm text-white/40 hover:text-white transition-colors cursor-pointer" data-testid="link-footer-privacy">Privacy Policy</span></Link>
+                <Link href="/terms-of-service"><span className="block text-sm text-white/40 hover:text-white transition-colors cursor-pointer" data-testid="link-footer-terms">Terms of Service</span></Link>
+                <Link href="/data-deletion"><span className="block text-sm text-white/40 hover:text-white transition-colors cursor-pointer" data-testid="link-footer-data-deletion">Data Deletion</span></Link>
               </div>
             </div>
           </div>
-          <div className="pt-8 border-t flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">
+          <div className="pt-8 border-t border-white/8 flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-white/30">
               © {new Date().getFullYear()} 1SOL.AI. All rights reserved.
             </p>
-            <div className="flex items-center gap-4">
-              <ThemeToggle />
-            </div>
           </div>
         </div>
       </footer>
