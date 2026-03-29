@@ -776,19 +776,6 @@ export default function SupportChatPage() {
     try { localStorage.setItem("chat-sound-muted", String(soundMuted)); } catch {}
   }, [soundMuted]);
 
-  // Fetch order vars when template picker opens for a conversation with a linked order
-  const selectedConvOrderId = conversations.find(c => c.id === selectedConvId)?.orderId;
-  useEffect(() => {
-    if (!templatePickerOpen || !selectedConvId || !selectedConvOrderId) {
-      setOrderVars(null);
-      return;
-    }
-    fetch(`/api/support/conversations/${selectedConvId}/order-vars`, { credentials: "include" })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => setOrderVars(data?.vars ?? null))
-      .catch(() => setOrderVars(null));
-  }, [templatePickerOpen, selectedConvId, selectedConvOrderId]);
-
   // Rehydrate templateVars when orderVars resolves after a template was already selected
   useEffect(() => {
     if (!orderVars || !selectedTemplate?.body) return;
@@ -967,6 +954,19 @@ export default function SupportChatPage() {
   });
 
   const archivedCount = isArchivedView ? conversations.length : archivedConversations.length;
+
+  // Fetch order vars when template picker opens for a conversation with a linked order
+  const selectedConvOrderId = conversations.find(c => c.id === selectedConvId)?.orderId;
+  useEffect(() => {
+    if (!templatePickerOpen || !selectedConvId || !selectedConvOrderId) {
+      setOrderVars(null);
+      return;
+    }
+    fetch(`/api/support/conversations/${selectedConvId}/order-vars`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setOrderVars(data?.vars ?? null))
+      .catch(() => setOrderVars(null));
+  }, [templatePickerOpen, selectedConvId, selectedConvOrderId]);
 
   useEffect(() => {
     if (!deepLinkOrderId || deepLinkApplied.current || conversations.length === 0) return;
