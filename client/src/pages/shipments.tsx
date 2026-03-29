@@ -84,11 +84,13 @@ function getWorkflowBadge(status: string) {
 }
 
 function getCourierStatusBadge(rawStatus: string) {
-  const s = rawStatus.toLowerCase();
-  if (s.includes("deliver")) return <Badge className="text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{rawStatus}</Badge>;
-  if (s.includes("transit") || s.includes("in-transit") || s.includes("pickup") || s.includes("dispatched") || s.includes("out for")) return <Badge className="text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">{rawStatus}</Badge>;
-  if (s.includes("return")) return <Badge className="text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">{rawStatus}</Badge>;
-  if (s.includes("pending") || s.includes("await") || s.includes("processing")) return <Badge className="text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">{rawStatus}</Badge>;
+  const s = rawStatus.toLowerCase().trim();
+  const isReturn = s.includes("return") || s.includes("undeliver") || s.includes("not deliver") || s.includes("failed") || s.includes("refused");
+  if (isReturn) return <Badge className="text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">{rawStatus}</Badge>;
+  const isDelivered = s === "delivered" || s.startsWith("delivered") || /\bdeliver(ed)?\b/.test(s);
+  if (isDelivered) return <Badge className="text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{rawStatus}</Badge>;
+  if (s.includes("transit") || s.includes("pickup") || s.includes("dispatched") || s.includes("out for") || s.includes("in-transit")) return <Badge className="text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">{rawStatus}</Badge>;
+  if (s.includes("pending") || s.includes("await") || s.includes("processing") || s.includes("booked")) return <Badge className="text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">{rawStatus}</Badge>;
   return <Badge className="text-xs font-medium bg-white/[0.04] text-white/40 border border-white/[0.08]">{rawStatus}</Badge>;
 }
 
