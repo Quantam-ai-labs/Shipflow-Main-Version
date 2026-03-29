@@ -121,7 +121,7 @@ function StatCard({
 }) {
   if (isLoading) {
     return (
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardContent className="p-4">
           <div className="space-y-2">
             <Skeleton className="h-3 w-20" />
@@ -134,12 +134,12 @@ function StatCard({
   }
 
   return (
-    <Card className="border-l-[3px] border-l-primary">
+    <Card className="bg-[#0d1322] border-white/[0.08]">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
-            <p className="text-2xl font-semibold">{value}</p>
+            <p className="text-[11px] font-medium text-white/40 uppercase tracking-wider">{title}</p>
+            <p className="text-2xl font-semibold text-white">{value}</p>
             {trend !== undefined && (
               <div className="flex items-center gap-1 text-xs">
                 {trend >= 0 ? (
@@ -150,14 +150,14 @@ function StatCard({
                 <span className={trend >= 0 ? "text-green-500" : "text-red-500"}>
                   {trend >= 0 ? "+" : ""}{trend}%
                 </span>
-                <span className="text-muted-foreground">{trendLabel}</span>
+                <span className="text-white/40">{trendLabel}</span>
               </div>
             )}
             {subtitle && (
-              <p className="text-xs text-muted-foreground">{subtitle}</p>
+              <p className="text-[11px] text-white/40">{subtitle}</p>
             )}
           </div>
-          <div className={`w-9 h-9 rounded-lg flex items-center justify-center bg-primary/10 shrink-0`}>
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center bg-white/[0.06] shrink-0`}>
             <Icon className={`w-4 h-4 ${iconColor}`} />
           </div>
         </div>
@@ -166,31 +166,50 @@ function StatCard({
   );
 }
 
-function PerformanceBar({
+function KpiMetricCard({
   label,
   value,
   subtitle,
-  barColor = "bg-primary",
+  icon: Icon,
+  iconColor = "text-primary",
+  isLoading = false,
 }: {
   label: string;
   value: number;
   subtitle: string;
-  barColor?: string;
+  icon: React.ElementType;
+  iconColor?: string;
+  isLoading?: boolean;
 }) {
+  if (isLoading) {
+    return (
+      <Card className="bg-[#0d1322] border-white/[0.08]">
+        <CardContent className="p-4">
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-8 w-16" />
+            <Skeleton className="h-3 w-28" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
-        <span className="text-sm font-semibold tabular-nums">{value}%</span>
-      </div>
-      <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
-        <div
-          className={`h-full rounded-full ${barColor} transition-all duration-500`}
-          style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }}
-        />
-      </div>
-      <p className="text-xs text-muted-foreground">{subtitle}</p>
-    </div>
+    <Card className="bg-[#0d1322] border-white/[0.08]">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1 min-w-0">
+            <p className="text-[11px] font-medium text-white/40 uppercase tracking-wider">{label}</p>
+            <p className="text-2xl font-semibold text-white tabular-nums">{value}%</p>
+            <p className="text-[11px] text-white/40">{subtitle}</p>
+          </div>
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-white/[0.06] shrink-0">
+            <Icon className={`w-4 h-4 ${iconColor}`} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1021,53 +1040,143 @@ export default function Dashboard() {
 
         return (
           <>
-            <div
-              className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3"
-              data-testid="section-order-overview"
-            >
-              <StatCard
-                title="Total Orders"
-                value={countsLoading ? "—" : total.toLocaleString()}
-                icon={Package}
-                trend={stats?.ordersTrend}
-                trendLabel="vs last week"
-                subtitle={countsLoading ? undefined : fmtCod(totalCod)}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Dispatched"
-                value={countsLoading ? "—" : dispatched.toLocaleString()}
-                icon={Send}
-                iconColor="text-muted-foreground"
-                subtitle={countsLoading ? undefined : fmtCod(dispatchedCod)}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Delivered"
-                value={countsLoading ? "—" : delivered.toLocaleString()}
-                icon={CheckCircle2}
-                iconColor="text-emerald-500"
-                subtitle={countsLoading ? undefined : fmtCod(deliveredCod)}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Pending"
-                value={countsLoading ? "—" : pending.toLocaleString()}
-                icon={Clock}
-                iconColor="text-amber-500"
-                subtitle={countsLoading ? undefined : fmtCod(pendingCod)}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Cancelled"
-                value={countsLoading ? "—" : cancelled.toLocaleString()}
-                icon={Ban}
-                iconColor="text-red-500"
-                subtitle={countsLoading ? undefined : fmtCod(cancelledCod)}
-                isLoading={countsLoading}
-              />
+            {/* ORDER OVERVIEW */}
+            <div>
+              <p className="text-[11px] font-medium text-white/40 uppercase tracking-wider mb-3" data-testid="section-order-overview">Order Overview</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                <StatCard
+                  title="Total Orders"
+                  value={countsLoading ? "—" : total.toLocaleString()}
+                  icon={Package}
+                  trend={stats?.ordersTrend}
+                  trendLabel="vs last week"
+                  subtitle={countsLoading ? undefined : fmtCod(totalCod)}
+                  isLoading={countsLoading}
+                />
+                <StatCard
+                  title="Dispatched"
+                  value={countsLoading ? "—" : dispatched.toLocaleString()}
+                  icon={Send}
+                  iconColor="text-white/60"
+                  subtitle={countsLoading ? undefined : fmtCod(dispatchedCod)}
+                  isLoading={countsLoading}
+                />
+                <StatCard
+                  title="Delivered"
+                  value={countsLoading ? "—" : delivered.toLocaleString()}
+                  icon={CheckCircle2}
+                  iconColor="text-emerald-400"
+                  subtitle={countsLoading ? undefined : fmtCod(deliveredCod)}
+                  isLoading={countsLoading}
+                />
+                <StatCard
+                  title="Pending"
+                  value={countsLoading ? "—" : pending.toLocaleString()}
+                  icon={Clock}
+                  iconColor="text-amber-400"
+                  subtitle={countsLoading ? undefined : fmtCod(pendingCod)}
+                  isLoading={countsLoading}
+                />
+                <StatCard
+                  title="Cancelled"
+                  value={countsLoading ? "—" : cancelled.toLocaleString()}
+                  icon={Ban}
+                  iconColor="text-red-400"
+                  subtitle={countsLoading ? undefined : fmtCod(cancelledCod)}
+                  isLoading={countsLoading}
+                />
+              </div>
             </div>
 
+            {/* PERFORMANCE METRICS */}
+            <div>
+              <p className="text-[11px] font-medium text-white/40 uppercase tracking-wider mb-3" data-testid="section-performance-metrics">Performance Metrics</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                <KpiMetricCard
+                  label="Fulfillment Ratio"
+                  value={fulfillmentRatio}
+                  subtitle={`${dispatched.toLocaleString()} dispatched / ${total.toLocaleString()} total`}
+                  icon={Send}
+                  iconColor="text-blue-400"
+                  isLoading={countsLoading}
+                />
+                <KpiMetricCard
+                  label="Delivery Ratio"
+                  value={deliveryRatio}
+                  subtitle={`${delivered.toLocaleString()} delivered / ${dispatched.toLocaleString()} dispatched`}
+                  icon={CheckCircle2}
+                  iconColor="text-emerald-400"
+                  isLoading={countsLoading}
+                />
+                <KpiMetricCard
+                  label="Pending in Transit"
+                  value={pendingRatio}
+                  subtitle={`${fulfilled.toLocaleString()} fulfilled / ${dispatched.toLocaleString()} dispatched`}
+                  icon={Clock}
+                  iconColor="text-sky-400"
+                  isLoading={countsLoading}
+                />
+                <KpiMetricCard
+                  label="Return Ratio"
+                  value={returnRatio}
+                  subtitle={`${returned.toLocaleString()} returned / ${dispatched.toLocaleString()} dispatched`}
+                  icon={TrendingDown}
+                  iconColor="text-rose-400"
+                  isLoading={countsLoading}
+                />
+                <KpiMetricCard
+                  label="Cancellation Ratio"
+                  value={cancellationRatio}
+                  subtitle={`${cancelled.toLocaleString()} cancelled / ${total.toLocaleString()} total`}
+                  icon={Ban}
+                  iconColor="text-red-400"
+                  isLoading={countsLoading}
+                />
+              </div>
+            </div>
+
+            {/* ORDER STATUS CHIPS — full-width strip */}
+            <Card className="bg-[#0d1322] border-white/[0.08]">
+              <CardContent className="p-4">
+                <p className="text-[11px] font-medium text-white/40 uppercase tracking-wider mb-3">Order Status</p>
+                {countsLoading ? (
+                  <div className="flex gap-2 flex-wrap">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <Skeleton key={i} className="h-6 w-20 rounded-full" />
+                    ))}
+                  </div>
+                ) : workflowCounts ? (
+                  <div className="flex gap-1.5 flex-wrap" data-testid="status-breakdown-chips">
+                    {[
+                      { key: 'NEW', label: 'New' },
+                      { key: 'PENDING', label: 'Pending' },
+                      { key: 'HOLD', label: 'Hold' },
+                      { key: 'READY_TO_SHIP', label: 'Ready to Ship' },
+                      { key: 'BOOKED', label: 'Booked' },
+                      { key: 'FULFILLED', label: 'Fulfilled' },
+                      { key: 'DELIVERED', label: 'Delivered' },
+                      { key: 'RETURN', label: 'Return' },
+                      { key: 'CANCELLED', label: 'Cancelled' },
+                    ]
+                      .filter(s => (workflowCounts[s.key] || 0) > 0)
+                      .map(s => (
+                        <Link key={s.key} href={`/orders?workflowStatus=${s.key}`}>
+                          <Badge
+                            variant="outline"
+                            className={`cursor-pointer text-xs bg-transparent ${DASHBOARD_CHIP_COLORS[s.key] || ""}`}
+                            data-testid={`chip-dashboard-${s.key}`}
+                          >
+                            {s.label}
+                            <span className="font-semibold ml-1">{(workflowCounts[s.key] || 0).toLocaleString()}</span>
+                          </Badge>
+                        </Link>
+                      ))}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            {/* CHART + RECENT ORDERS + COD */}
             <div className="grid xl:grid-cols-3 gap-5">
               <div className="xl:col-span-2 space-y-5">
                 <Card>
@@ -1120,53 +1229,6 @@ export default function Dashboard() {
                           />
                         </AreaChart>
                       </ResponsiveContainer>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium" data-testid="section-performance-metrics">Performance Metrics</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {countsLoading ? (
-                      <div className="space-y-4">
-                        {[1, 2, 3, 4, 5].map((i) => (
-                          <Skeleton key={i} className="h-8 w-full" />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <PerformanceBar
-                          label="Fulfillment Ratio"
-                          value={fulfillmentRatio}
-                          subtitle={`${dispatched} dispatched of ${total} total`}
-                        />
-                        <PerformanceBar
-                          label="Delivery Ratio"
-                          value={deliveryRatio}
-                          subtitle={`${delivered} delivered of ${dispatched} dispatched`}
-                          barColor="bg-emerald-500"
-                        />
-                        <PerformanceBar
-                          label="Pending in Transit"
-                          value={pendingRatio}
-                          subtitle={`${fulfilled} fulfilled of ${dispatched} dispatched`}
-                          barColor="bg-sky-500"
-                        />
-                        <PerformanceBar
-                          label="Return Ratio"
-                          value={returnRatio}
-                          subtitle={`${returned} returned of ${dispatched} dispatched`}
-                          barColor="bg-rose-500"
-                        />
-                        <PerformanceBar
-                          label="Cancellation Ratio"
-                          value={cancellationRatio}
-                          subtitle={`${cancelled} cancelled of ${total} total`}
-                          barColor="bg-red-500"
-                        />
-                      </div>
                     )}
                   </CardContent>
                 </Card>
@@ -1233,13 +1295,13 @@ export default function Dashboard() {
               </div>
 
               <div className="space-y-4">
-                <Card className="border-l-[3px] border-l-amber-500">
+                <Card className="bg-[#0d1322] border-white/[0.08]">
                   <CardContent className="p-4">
-                    <p className="text-xs font-medium text-amber-400/80 uppercase tracking-wide">COD Pending Collection</p>
+                    <p className="text-[11px] font-medium text-amber-400/80 uppercase tracking-wider">COD Pending Collection</p>
                     {statsLoading ? (
                       <Skeleton className="h-8 w-32 mt-2" />
                     ) : (
-                      <p className="text-2xl font-semibold mt-1 tabular-nums" data-testid="text-cod-pending">
+                      <p className="text-2xl font-semibold mt-1 tabular-nums text-white" data-testid="text-cod-pending">
                         PKR {stats?.codPending ?? "0"}
                       </p>
                     )}
@@ -1249,48 +1311,6 @@ export default function Dashboard() {
                         <ArrowUpRight className="w-3.5 h-3.5 ml-1.5" />
                       </Button>
                     </Link>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Order Status</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {countsLoading ? (
-                      <div className="flex gap-2 flex-wrap">
-                        {Array.from({ length: 6 }).map((_, i) => (
-                          <Skeleton key={i} className="h-6 w-20 rounded-full" />
-                        ))}
-                      </div>
-                    ) : workflowCounts ? (
-                      <div className="flex gap-1.5 flex-wrap" data-testid="status-breakdown-chips">
-                        {[
-                          { key: 'NEW', label: 'New' },
-                          { key: 'PENDING', label: 'Pending' },
-                          { key: 'HOLD', label: 'Hold' },
-                          { key: 'READY_TO_SHIP', label: 'Ready to Ship' },
-                          { key: 'BOOKED', label: 'Booked' },
-                          { key: 'FULFILLED', label: 'Fulfilled' },
-                          { key: 'DELIVERED', label: 'Delivered' },
-                          { key: 'RETURN', label: 'Return' },
-                          { key: 'CANCELLED', label: 'Cancelled' },
-                        ]
-                          .filter(s => (workflowCounts[s.key] || 0) > 0)
-                          .map(s => (
-                            <Link key={s.key} href={`/orders?workflowStatus=${s.key}`}>
-                              <Badge
-                                variant="outline"
-                                className={`cursor-pointer text-xs bg-transparent ${DASHBOARD_CHIP_COLORS[s.key] || ""}`}
-                                data-testid={`chip-dashboard-${s.key}`}
-                              >
-                                {s.label}
-                                <span className="font-semibold ml-1">{(workflowCounts[s.key] || 0).toLocaleString()}</span>
-                              </Badge>
-                            </Link>
-                          ))}
-                      </div>
-                    ) : null}
                   </CardContent>
                 </Card>
               </div>
