@@ -21,7 +21,8 @@ Preferred communication style: Simple, everyday language.
 ### UI/UX Decisions
 - Dates are formatted `dd-MM-yyyy`.
 - Features a collapsible sidebar for settings and a Shopify-like layout for order details.
-- **Design System**: Uses Inter font, a clean neutral palette with a muted blue primary color for CTAs, `0.375rem` border radius, and a flat design approach for consistent visual language.
+- **Aurora Glass Design System** (public pages & auth): Background `#08080f`, glass card `bg-white/4 border border-white/10 backdrop-blur-xl`, gradient text `from-violet-400 via-emerald-400 to-amber-400`, aurora orbs violet/emerald/amber at 15% opacity, primary CTA `from-violet-600 to-emerald-500`.
+- **Dashboard Dark Navy Design System**: Background `#090e1a`, card `rgba(13,19,34,0.85) border rgba(255,255,255,0.07) rounded-2xl backdrop-blur-xl`, accent colors blue `#3b82f6` / violet `#8b5cf6` / emerald `#10b981` / rose `#f43f5e`, muted text `rgba(255,255,255,0.4)`. Dashboard uses `margin: "-24px", padding: "24px"` to expand edge-to-edge in layout. Includes 4 dark KPI cards with colored left-border accents, recharts AreaChart for pipeline distribution, MetricBar horizontal progress bars for performance, dark status chips, dark recent orders table, and dark order search inputs.
 - **Specific UI Elements**: Icons use `text-muted-foreground`, badges use `variant="secondary"` or `variant="outline"`, and chart colors use CSS chart tokens (`--chart-1` to `--chart-5`).
 
 ### Key Features
