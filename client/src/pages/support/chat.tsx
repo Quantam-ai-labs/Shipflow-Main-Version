@@ -196,12 +196,16 @@ function formatChatTime(dateStr: string) {
   return format(d, "dd/MM/yy");
 }
 
-function getAvatarColor(name: string): string {
-  const colors = [
-    "bg-blue-600", "bg-violet-600", "bg-emerald-600", "bg-indigo-600",
-    "bg-teal-600", "bg-cyan-600", "bg-purple-600", "bg-sky-600",
+function getAvatarGradient(name: string): string {
+  const gradients = [
+    "bg-gradient-to-br from-blue-500 to-blue-700",
+    "bg-gradient-to-br from-violet-500 to-violet-700",
+    "bg-gradient-to-br from-emerald-500 to-emerald-700",
+    "bg-gradient-to-br from-blue-600 to-violet-600",
+    "bg-gradient-to-br from-violet-500 to-emerald-600",
+    "bg-gradient-to-br from-emerald-500 to-blue-600",
   ];
-  return colors[name.charCodeAt(0) % colors.length];
+  return gradients[name.charCodeAt(0) % gradients.length];
 }
 
 function StatusTicks({ status, createdAt, sentAt, deliveredAt, readAt }: {
@@ -1873,7 +1877,7 @@ export default function SupportChatPage() {
                   <div className="relative shrink-0">
                     <div className={cn(
                       "w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-base",
-                      getAvatarColor(conv.contactName ?? conv.contactPhone)
+                      getAvatarGradient(conv.contactName ?? conv.contactPhone)
                     )}>
                       {(conv.contactName ?? conv.contactPhone).charAt(0).toUpperCase()}
                     </div>
