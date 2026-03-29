@@ -52,14 +52,14 @@ function formatCurrency(val: number) {
 
 function StatusBadge({ status }: { status: string }) {
   const s = status?.toUpperCase();
-  if (s === "ACTIVE") return <Badge variant="secondary" className="text-[10px]">ACTIVE</Badge>;
-  if (s === "PAUSED") return <Badge variant="outline" className="text-[10px]">PAUSED</Badge>;
-  if (s === "ARCHIVED") return <Badge variant="outline" className="text-[10px]">ARCHIVED</Badge>;
-  return <Badge variant="outline" className="text-[10px]">{s || "UNKNOWN"}</Badge>;
+  if (s === "ACTIVE") return <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">ACTIVE</Badge>;
+  if (s === "PAUSED") return <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px]">PAUSED</Badge>;
+  if (s === "ARCHIVED") return <Badge className="bg-white/[0.06] text-white/50 border border-white/[0.12] text-[10px]">ARCHIVED</Badge>;
+  return <Badge className="bg-white/[0.06] text-white/50 border border-white/[0.12] text-[10px]">{s || "UNKNOWN"}</Badge>;
 }
 
 function WorkflowBadge({ status }: { status: string }) {
-  return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
+  return <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px]">{status}</Badge>;
 }
 
 export default function AdAttribution() {
@@ -172,7 +172,7 @@ export default function AdAttribution() {
 
       {/* UTM Setup Guide */}
       <Collapsible open={guideOpen} onOpenChange={setGuideOpen}>
-        <Card className="border-border bg-muted/30">
+        <Card className="bg-[#0d1322] border-white/[0.08]">
           <CollapsibleTrigger asChild>
             <CardHeader className="cursor-pointer pb-3">
               <div className="flex items-center justify-between">
@@ -242,11 +242,11 @@ export default function AdAttribution() {
             icon: DollarSign,
           },
         ].map((stat) => (
-          <Card key={stat.label}>
+          <Card key={stat.label} className="bg-[#0d1322] border-white/[0.08]">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
-                <stat.icon className="w-4 h-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{stat.label}</span>
+                <stat.icon className="w-4 h-4 text-blue-400" />
+                <span className="text-xs text-white/40 uppercase tracking-wider">{stat.label}</span>
               </div>
               {isLoading ? (
                 <Skeleton className="h-7 w-24" />
@@ -259,7 +259,7 @@ export default function AdAttribution() {
       </div>
 
       {/* Campaign Breakdown */}
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
@@ -287,18 +287,18 @@ export default function AdAttribution() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Campaign</TableHead>
-                  <TableHead className="text-right">Orders</TableHead>
-                  <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead className="text-right">Avg. Order</TableHead>
+                <TableRow className="bg-white/[0.04] border-b border-white/[0.06]">
+                  <TableHead className="text-white/40 text-xs uppercase tracking-wider">Campaign</TableHead>
+                  <TableHead className="text-right text-white/40 text-xs uppercase tracking-wider">Orders</TableHead>
+                  <TableHead className="text-right text-white/40 text-xs uppercase tracking-wider">Revenue</TableHead>
+                  <TableHead className="text-right text-white/40 text-xs uppercase tracking-wider">Avg. Order</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {campaigns.map((c) => (
                   <TableRow
                     key={c.campaignId}
-                    className={`cursor-pointer transition-colors ${selectedCampaign === c.campaignId ? "bg-muted/50" : "hover:bg-muted/30"}`}
+                    className={`cursor-pointer transition-colors border-b border-white/[0.04] ${selectedCampaign === c.campaignId ? "bg-blue-500/10" : "hover:bg-blue-500/[0.06]"}`}
                     onClick={() => setSelectedCampaign(selectedCampaign === c.campaignId ? null : c.campaignId)}
                     data-testid={`row-campaign-${c.campaignId}`}
                   >
@@ -323,7 +323,7 @@ export default function AdAttribution() {
       </Card>
 
       {/* Order-Level Attribution Table */}
-      <Card>
+      <Card className="bg-[#0d1322] border-white/[0.08]">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <ShoppingCart className="w-4 h-4" />
@@ -346,20 +346,20 @@ export default function AdAttribution() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Order</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Campaign</TableHead>
-                  <TableHead>Ad</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
+                <TableRow className="bg-white/[0.04] border-b border-white/[0.06]">
+                  <TableHead className="text-white/40 text-xs uppercase tracking-wider">Order</TableHead>
+                  <TableHead className="text-white/40 text-xs uppercase tracking-wider">Customer</TableHead>
+                  <TableHead className="text-white/40 text-xs uppercase tracking-wider">Campaign</TableHead>
+                  <TableHead className="text-white/40 text-xs uppercase tracking-wider">Ad</TableHead>
+                  <TableHead className="text-right text-white/40 text-xs uppercase tracking-wider">Amount</TableHead>
+                  <TableHead className="text-white/40 text-xs uppercase tracking-wider">Status</TableHead>
+                  <TableHead className="text-white/40 text-xs uppercase tracking-wider">Date</TableHead>
                   <TableHead className="w-8"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {displayedOrders.map((order) => (
-                  <TableRow key={order.id} data-testid={`row-order-${order.id}`}>
+                  <TableRow key={order.id} className="border-b border-white/[0.04] hover:bg-blue-500/[0.06]" data-testid={`row-order-${order.id}`}>
                     <TableCell className="font-medium text-sm">{order.orderNumber}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{order.customerName}</TableCell>
                     <TableCell>

@@ -270,23 +270,23 @@ export default function MetaCampaigns() {
               <CardContent className="flex items-center gap-3 py-3 px-4 flex-wrap">
                 <span className="text-sm font-medium" data-testid="text-selected-count">{selectedIds.size} selected</span>
                 <div className="h-4 w-px bg-border" />
-                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={bulkStatusMutation.isPending}
+                <Button size="sm" variant="outline" className="h-7 text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20" disabled={bulkStatusMutation.isPending}
                   onClick={() => bulkStatusMutation.mutate({ campaignIds: [...selectedIds], status: "ACTIVE" })} data-testid="button-bulk-activate">
                   <Play className="w-3 h-3 mr-1" />Activate All
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={bulkStatusMutation.isPending}
+                <Button size="sm" variant="outline" className="h-7 text-xs bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20" disabled={bulkStatusMutation.isPending}
                   onClick={() => bulkStatusMutation.mutate({ campaignIds: [...selectedIds], status: "PAUSED" })} data-testid="button-bulk-pause">
                   <Pause className="w-3 h-3 mr-1" />Pause All
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs"
+                <Button size="sm" variant="outline" className="h-7 text-xs bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20"
                   onClick={() => { setBudgetAction("increase"); setBudgetDialog("campaign"); }} data-testid="button-bulk-increase-budget">
                   <TrendingUp className="w-3 h-3 mr-1" />Increase Budget
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs"
+                <Button size="sm" variant="outline" className="h-7 text-xs bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20"
                   onClick={() => { setBudgetAction("decrease"); setBudgetDialog("campaign"); }} data-testid="button-bulk-decrease-budget">
                   <TrendingDown className="w-3 h-3 mr-1" />Decrease Budget
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs"
+                <Button size="sm" variant="outline" className="h-7 text-xs bg-white/[0.04] border-white/[0.08] text-white/70 hover:bg-white/[0.08]"
                   onClick={() => { setBudgetAction("set"); setBudgetDialog("campaign"); }} data-testid="button-bulk-set-budget">
                   <DollarSign className="w-3 h-3 mr-1" />Set Budget
                 </Button>
@@ -359,27 +359,27 @@ export default function MetaCampaigns() {
               <CardContent className="flex items-center gap-3 py-3 px-4 flex-wrap">
                 <span className="text-sm font-medium" data-testid="text-adset-selected-count">{selectedAdSetIds.size} selected</span>
                 <div className="h-4 w-px bg-border" />
-                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={adSetBulkStatusMutation.isPending}
+                <Button size="sm" variant="outline" className="h-7 text-xs bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20" disabled={adSetBulkStatusMutation.isPending}
                   onClick={() => adSetBulkStatusMutation.mutate({ adSetIds: [...selectedAdSetIds], status: "ACTIVE" })} data-testid="button-adset-bulk-activate">
                   <Play className="w-3 h-3 mr-1" />Activate All
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={adSetBulkStatusMutation.isPending}
+                <Button size="sm" variant="outline" className="h-7 text-xs bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20" disabled={adSetBulkStatusMutation.isPending}
                   onClick={() => adSetBulkStatusMutation.mutate({ adSetIds: [...selectedAdSetIds], status: "PAUSED" })} data-testid="button-adset-bulk-pause">
                   <Pause className="w-3 h-3 mr-1" />Pause All
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs"
+                <Button size="sm" variant="outline" className="h-7 text-xs bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20"
                   onClick={() => { setBudgetAction("increase"); setBudgetDialog("adset"); }} data-testid="button-adset-bulk-increase-budget">
                   <TrendingUp className="w-3 h-3 mr-1" />Increase Budget
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs"
+                <Button size="sm" variant="outline" className="h-7 text-xs bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20"
                   onClick={() => { setBudgetAction("decrease"); setBudgetDialog("adset"); }} data-testid="button-adset-bulk-decrease-budget">
                   <TrendingDown className="w-3 h-3 mr-1" />Decrease Budget
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs"
+                <Button size="sm" variant="outline" className="h-7 text-xs bg-white/[0.04] border-white/[0.08] text-white/70 hover:bg-white/[0.08]"
                   onClick={() => { setBudgetAction("set"); setBudgetDialog("adset"); }} data-testid="button-adset-bulk-set-budget">
                   <DollarSign className="w-3 h-3 mr-1" />Set Budget
                 </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs"
+                <Button size="sm" variant="outline" className="h-7 text-xs bg-violet-500/10 border-violet-500/30 text-violet-400 hover:bg-violet-500/20"
                   onClick={() => setTargetingDialog(true)} data-testid="button-adset-bulk-targeting">
                   <Target className="w-3 h-3 mr-1" />Update Targeting
                 </Button>

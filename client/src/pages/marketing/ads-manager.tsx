@@ -390,7 +390,7 @@ export default function AdsManager() {
               className={autoRefresh ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10" : "border-white/10 text-white/60 bg-white/[0.04]"}
             >
               {autoRefresh ? <ToggleRight className="w-4 h-4 mr-1 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 mr-1 text-white/40" />}
-              Auto
+              Auto Refresh
             </Button>
             <Button
               variant="outline"
@@ -413,7 +413,7 @@ export default function AdsManager() {
         <div className="flex flex-wrap items-center gap-2">
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" data-testid="button-date-range">
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 bg-white/[0.04] border-white/[0.08] text-white/70" data-testid="button-date-range">
                 <Calendar className="w-3.5 h-3.5" />
                 {activeDateLabel}
               </Button>
@@ -463,7 +463,7 @@ export default function AdsManager() {
           </Popover>
 
           <Select value={level} onValueChange={setLevel}>
-            <SelectTrigger className="w-[120px] h-8 text-xs" data-testid="select-level">
+            <SelectTrigger className="w-[120px] h-8 text-xs bg-white/[0.04] border-white/[0.08] text-white/70" data-testid="select-level">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -474,7 +474,7 @@ export default function AdsManager() {
           </Select>
 
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[110px] h-8 text-xs" data-testid="select-status-filter">
+            <SelectTrigger className="w-[110px] h-8 text-xs bg-white/[0.04] border-white/[0.08] text-white/70" data-testid="select-status-filter">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -485,7 +485,7 @@ export default function AdsManager() {
           </Select>
 
           <Select value={columnPreset} onValueChange={setColumnPreset}>
-            <SelectTrigger className="w-[120px] h-8 text-xs" data-testid="select-column-preset">
+            <SelectTrigger className="w-[120px] h-8 text-xs bg-white/[0.04] border-white/[0.08] text-white/70" data-testid="select-column-preset">
               <SelectValue placeholder="Columns" />
             </SelectTrigger>
             <SelectContent>
@@ -639,7 +639,7 @@ export default function AdsManager() {
                             ) : col.key === "status" ? (
                               statusBadge(row.status)
                             ) : col.key === "roas" ? (
-                              <span className={row.roas >= 1 ? "text-emerald-400 font-medium" : row.roas > 0 ? "text-red-400" : "text-muted-foreground"}>
+                              <span className={row.roas >= 2 ? "text-emerald-400 font-medium" : row.roas >= 1 ? "text-blue-400 font-medium" : row.roas > 0 ? "text-amber-400" : "text-white/30"}>
                                 {formatCell(row[col.key], col.format)}
                               </span>
                             ) : col.key === "dailyBudget" ? (
