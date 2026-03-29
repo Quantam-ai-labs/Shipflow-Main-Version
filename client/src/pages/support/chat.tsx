@@ -196,6 +196,14 @@ function formatChatTime(dateStr: string) {
   return format(d, "dd/MM/yy");
 }
 
+function getAvatarColor(name: string): string {
+  const colors = [
+    "bg-blue-600", "bg-violet-600", "bg-emerald-600", "bg-indigo-600",
+    "bg-teal-600", "bg-cyan-600", "bg-purple-600", "bg-sky-600",
+  ];
+  return colors[name.charCodeAt(0) % colors.length];
+}
+
 function StatusTicks({ status, createdAt, sentAt, deliveredAt, readAt }: {
   status: string | null;
   createdAt?: string | Date;
@@ -1655,14 +1663,14 @@ export default function SupportChatPage() {
 
   return (
     <div className="flex h-full overflow-hidden bg-background">
-      <div className="w-[380px] border-r border-border flex flex-col shrink-0 bg-background">
-        <div className="h-14 bg-card border-b border-border flex items-center px-4 gap-3">
-          <div className="w-9 h-9 bg-primary rounded-full flex items-center justify-center">
-            <MessageCircle className="w-5 h-5 text-primary-foreground" />
+      <div className="w-[380px] border-r border-white/[0.06] flex flex-col shrink-0 bg-[#070b14]">
+        <div className="h-14 bg-[#070b14] border-b border-white/[0.06] flex items-center px-4 gap-3">
+          <div className="w-9 h-9 bg-blue-500/20 rounded-full flex items-center justify-center">
+            <MessageCircle className="w-5 h-5 text-blue-400" />
           </div>
-          <h2 className="font-semibold text-foreground text-sm flex-1">Chats</h2>
+          <h2 className="font-semibold text-white/90 text-sm flex-1">Chats</h2>
           {!isArchivedView && totalUnread > 0 && (
-            <Badge variant="default" className="text-xs rounded-full bg-green-500 text-white border-green-500" data-testid="badge-total-unread">
+            <Badge variant="default" className="text-xs rounded-full bg-blue-500 text-white border-blue-500" data-testid="badge-total-unread">
               {totalUnread}
             </Badge>
           )}
@@ -1691,16 +1699,16 @@ export default function SupportChatPage() {
 
         <div className="px-3 py-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 z-10" />
             <Input
               placeholder="Search by name, phone, or order..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 pr-8"
+              className="pl-10 pr-8 bg-white/[0.06] border-white/10 text-white/90 placeholder:text-white/30 focus-visible:ring-blue-500/50"
               data-testid="input-search-conversations"
             />
             {search && (
-              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70">
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -1720,8 +1728,8 @@ export default function SupportChatPage() {
                 className={cn(
                   "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border flex items-center gap-1",
                   labelFilter === f.key
-                    ? "bg-primary text-primary-foreground border-transparent"
-                    : "bg-card text-muted-foreground border-border hover-elevate"
+                    ? "bg-blue-500 text-white border-transparent"
+                    : "bg-white/[0.06] text-white/60 border-white/10 hover:bg-white/[0.08]"
                 )}
                 data-testid={`filter-${f.key}`}
               >
@@ -1730,7 +1738,7 @@ export default function SupportChatPage() {
                 {f.key === "archived" && archivedCount > 0 && (
                   <span className={cn(
                     "rounded-full px-1.5 py-0 text-[10px] font-bold leading-tight",
-                    labelFilter === "archived" ? "bg-white/20 text-white" : "bg-muted-foreground/20 text-muted-foreground"
+                    labelFilter === "archived" ? "bg-white/20 text-white" : "bg-white/10 text-white/40"
                   )}>
                     {archivedCount}
                   </span>
@@ -1744,8 +1752,8 @@ export default function SupportChatPage() {
                 className={cn(
                   "px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border",
                   labelFilter === l.name
-                    ? "bg-primary text-primary-foreground border-transparent"
-                    : "bg-card text-muted-foreground border-border hover-elevate"
+                    ? "bg-blue-500 text-white border-transparent"
+                    : "bg-white/[0.06] text-white/60 border-white/10 hover:bg-white/[0.08]"
                 )}
                 data-testid={`filter-${l.name.toLowerCase()}`}
               >
@@ -1755,7 +1763,7 @@ export default function SupportChatPage() {
             ))}
             <button
               onClick={() => setShowLabelManager(true)}
-              className="px-2 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground"
+              className="px-2 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all border border-dashed border-white/20 text-white/40 hover:text-white/70 hover:border-white/40"
               data-testid="button-manage-labels"
             >
               <Settings2 className="w-3 h-3 inline mr-1" />
@@ -1766,8 +1774,8 @@ export default function SupportChatPage() {
 
         {/* Multi-select bulk action bar */}
         {selectMode && selectedIds.size > 0 && (
-          <div className="px-3 pb-2 flex items-center gap-2 bg-accent/50 border-b border-border py-2">
-            <span className="text-xs font-medium flex-1">{selectedIds.size} selected</span>
+          <div className="px-3 pb-2 flex items-center gap-2 bg-white/[0.04] border-b border-white/[0.06] py-2">
+            <span className="text-xs font-medium flex-1 text-white/80">{selectedIds.size} selected</span>
             {isArchivedView ? (
               <Button
                 size="sm"
@@ -1799,7 +1807,7 @@ export default function SupportChatPage() {
         {/* Select All header row */}
         {selectMode && (
           <div
-            className="px-3 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-accent/30 border-b border-border"
+            className="px-3 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-white/[0.04] border-b border-white/[0.05]"
             onClick={() => {
               if (allSelected) {
                 setSelectedIds(new Set());
@@ -1816,7 +1824,7 @@ export default function SupportChatPage() {
             ) : (
               <Square className="w-4 h-4 text-muted-foreground" />
             )}
-            <span className="text-xs text-muted-foreground">Select all</span>
+            <span className="text-xs text-white/40">Select all</span>
           </div>
         )}
 
@@ -1839,8 +1847,8 @@ export default function SupportChatPage() {
                 <div
                   key={conv.id}
                   className={cn(
-                    "group w-full px-3 py-3 text-left transition-colors flex items-center gap-3 border-b border-border cursor-pointer",
-                    isSelected && !selectMode ? "bg-primary/10 border-l-[3px] border-l-primary" : "border-l-[3px] border-l-transparent hover-elevate"
+                    "group w-full px-3 py-3 text-left transition-colors flex items-center gap-3 border-b border-white/[0.05] cursor-pointer",
+                    isSelected && !selectMode ? "bg-blue-500/10 border-l-2 border-l-blue-500" : "border-l-2 border-l-transparent hover:bg-white/[0.04]"
                   )}
                   data-testid={`button-conversation-${conv.id}`}
                   onClick={() => {
@@ -1865,12 +1873,12 @@ export default function SupportChatPage() {
                   <div className="relative shrink-0">
                     <div className={cn(
                       "w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-base",
-                      labelInfo ? labelInfo.color : "bg-primary"
+                      getAvatarColor(conv.contactName ?? conv.contactPhone)
                     )}>
                       {(conv.contactName ?? conv.contactPhone).charAt(0).toUpperCase()}
                     </div>
                     {conv.unreadCount > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-green-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold shadow-sm">
+                      <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-emerald-500 rounded-full text-white text-[10px] flex items-center justify-center font-bold shadow-sm">
                         {conv.unreadCount > 9 ? "9+" : conv.unreadCount}
                       </span>
                     )}
@@ -1878,7 +1886,7 @@ export default function SupportChatPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                        <span className={cn("text-sm truncate", conv.unreadCount > 0 ? "font-bold text-foreground" : "text-foreground")} data-testid={`text-contact-${conv.id}`}>
+                        <span className={cn("text-sm truncate", conv.unreadCount > 0 ? "font-bold text-white" : "text-white/90")} data-testid={`text-contact-${conv.id}`}>
                           {conv.contactName || `+${conv.contactPhone}`}
                         </span>
                         {labelInfo && (
@@ -1887,31 +1895,31 @@ export default function SupportChatPage() {
                           </span>
                         )}
                       </div>
-                      <span className={cn("text-xs whitespace-nowrap shrink-0", conv.unreadCount > 0 ? "text-primary font-medium" : "text-muted-foreground")}>
+                      <span className={cn("text-xs whitespace-nowrap shrink-0", conv.unreadCount > 0 ? "text-emerald-400 font-medium" : "text-white/30")}>
                         {formatChatTime(conv.lastMessageAt)}
                       </span>
                     </div>
                     <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                       {conv.orderNumber && (
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
+                        <span className="text-[10px] text-amber-400 bg-white/[0.06] border border-white/10 px-1.5 py-0.5 rounded font-mono">
                           #{conv.orderNumber}
                         </span>
                       )}
                     </div>
                     <div className="flex items-center justify-between gap-1 mt-0.5">
-                      <p className={cn("text-xs truncate flex-1", conv.unreadCount > 0 ? "text-foreground" : "text-muted-foreground")}>
+                      <p className={cn("text-xs truncate flex-1", conv.unreadCount > 0 ? "text-white/70" : "text-white/40")}>
                         {conv.lastMessage || "No messages"}
                       </p>
                       <div className="flex items-center gap-1 shrink-0">
                         {conv.assignedToName && (
-                          <span className="text-[10px] text-muted-foreground ml-2 flex items-center gap-0.5">
+                          <span className="text-[10px] text-white/30 italic ml-2 flex items-center gap-0.5">
                             <UserPlus className="w-2.5 h-2.5" />
                             {conv.assignedToName.split(" ")[0]}
                           </span>
                         )}
                         {!selectMode && (
                           <button
-                            className="text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground p-0.5 rounded transition-opacity"
+                            className="text-white/30 opacity-0 group-hover:opacity-100 hover:text-white/70 p-0.5 rounded transition-opacity"
                             onClick={e => {
                               e.stopPropagation();
                               archiveMutation.mutate({ ids: [conv.id], unarchive: conv.isArchived });
@@ -1932,10 +1940,10 @@ export default function SupportChatPage() {
         </ScrollArea>
 
         {!selectMode && filtered.length > 0 && (
-          <div className="px-3 py-1.5 border-t border-border flex items-center justify-between">
+          <div className="px-3 py-1.5 border-t border-white/[0.06] flex items-center justify-between">
             <button
               onClick={() => setSelectMode(true)}
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 py-0.5"
+              className="text-xs text-white/50 hover:text-white/80 flex items-center gap-1 px-3 py-0.5 rounded-md border border-white/10 bg-white/[0.04] hover:bg-white/[0.06] transition-colors"
               data-testid="button-enter-select-mode"
             >
               <CheckSquare className="w-3.5 h-3.5" />

@@ -69,11 +69,11 @@ interface ComplaintTemplate {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; badgeVariant: string }> = {
-  logged: { label: "Logged", color: "bg-yellow-500", badgeVariant: "bg-yellow-500/10 text-yellow-600 border-yellow-200" },
-  in_progress: { label: "In Progress", color: "bg-blue-500", badgeVariant: "bg-blue-500/10 text-blue-600 border-blue-200" },
-  under_investigation: { label: "Under Investigation", color: "bg-purple-500", badgeVariant: "bg-purple-500/10 text-purple-600 border-purple-200" },
-  resolving: { label: "Resolving", color: "bg-orange-500", badgeVariant: "bg-orange-500/10 text-orange-600 border-orange-200" },
-  resolved: { label: "Resolved", color: "bg-green-500", badgeVariant: "bg-green-500/10 text-green-600 border-green-200" },
+  logged: { label: "Logged", color: "bg-yellow-500", badgeVariant: "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" },
+  in_progress: { label: "In Progress", color: "bg-blue-500", badgeVariant: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
+  under_investigation: { label: "Under Investigation", color: "bg-purple-500", badgeVariant: "bg-violet-500/10 text-violet-400 border border-violet-500/20" },
+  resolving: { label: "Resolving", color: "bg-orange-500", badgeVariant: "bg-orange-500/10 text-orange-400 border border-orange-500/20" },
+  resolved: { label: "Resolved", color: "bg-green-500", badgeVariant: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" },
 };
 
 const STATUS_ORDER = ["logged", "in_progress", "under_investigation", "resolving", "resolved"];
@@ -258,7 +258,7 @@ export default function SupportComplaintsPage() {
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/30 text-left">
+                <tr className="border-b border-white/[0.06] bg-white/[0.04] text-left">
                   <th className="px-4 py-2.5 font-medium text-muted-foreground">Ticket #</th>
                   <th className="px-4 py-2.5 font-medium text-muted-foreground">Customer</th>
                   <th className="px-4 py-2.5 font-medium text-muted-foreground">Order</th>
@@ -273,8 +273,8 @@ export default function SupportComplaintsPage() {
                   <tr
                     key={c.id}
                     data-testid={`row-complaint-${c.id}`}
-                    className={`border-b hover:bg-muted/20 cursor-pointer transition-colors ${
-                      selectedComplaint?.id === c.id ? "bg-muted/30" : ""
+                    className={`border-b border-white/[0.05] hover:bg-blue-500/[0.06] cursor-pointer transition-colors ${
+                      selectedComplaint?.id === c.id ? "bg-blue-500/10" : ""
                     }`}
                     onClick={() => setSelectedComplaint(c)}
                   >

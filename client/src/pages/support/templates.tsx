@@ -223,14 +223,14 @@ function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border rounded-md overflow-hidden">
+    <div className="border border-white/[0.08] rounded-md overflow-hidden">
       <button
         type="button"
-        className="w-full flex items-center gap-3 px-4 py-3 bg-card hover-elevate transition-colors text-left"
+        className="w-full flex items-center gap-3 px-4 py-3 bg-card hover:bg-white/[0.04] transition-colors text-left"
         onClick={() => setOpen(o => !o)}
         data-testid={`section-toggle-${title.toLowerCase().replace(/\s+/g, "-")}`}
       >
-        <span className="w-7 h-7 rounded-md flex items-center justify-center bg-muted text-muted-foreground text-xs font-bold shrink-0">
+        <span className="w-7 h-7 rounded-md flex items-center justify-center bg-white/[0.08] text-white/60 text-xs font-bold shrink-0">
           {label}
         </span>
         <div className="flex-1">
@@ -239,7 +239,7 @@ function Section({
         </div>
         {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
       </button>
-      {open && <div className="px-4 pb-4 pt-3 space-y-3 border-t bg-card">{children}</div>}
+      {open && <div className="px-4 pb-4 pt-3 space-y-3 border-t border-white/[0.06] bg-card">{children}</div>}
     </div>
   );
 }
@@ -253,8 +253,8 @@ function WaPreview({
   buttons: { type: string; text: string }[];
 }) {
   return (
-    <div className="bg-[#efeae2] dark:bg-[#0d1b17] rounded-xl p-4 min-h-48">
-      <div className="max-w-xs bg-white dark:bg-[#1f2c34] rounded-xl overflow-hidden shadow-sm">
+    <div className="bg-[#0d1b17] rounded-xl p-4 min-h-48">
+      <div className="max-w-xs bg-[#1f2c34] rounded-xl overflow-hidden shadow-sm">
         {headerText && (
           <div className="px-3 pt-3 pb-1">
             <p className="font-bold text-sm text-foreground">{buildPreview(headerText)}</p>
@@ -332,9 +332,9 @@ function TemplateEditor({
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {preset && (
-        <div className="flex items-center gap-2 mb-5 bg-muted border rounded-md px-4 py-2.5">
-          <FileText className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Using preset: <strong className="text-foreground">{preset.name}</strong></span>
+        <div className="flex items-center gap-2 mb-5 bg-blue-500/10 border border-blue-500/20 rounded-md px-4 py-2.5">
+          <FileText className="w-4 h-4 text-blue-400" />
+          <span className="text-sm text-blue-300">Using preset: <strong className="text-white">{preset.name}</strong></span>
         </div>
       )}
 

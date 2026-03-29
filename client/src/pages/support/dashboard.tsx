@@ -49,14 +49,17 @@ export default function SupportDashboardPage() {
         {isLoading ? (
           <Skeleton className="h-7 w-32" />
         ) : (
-          <Badge
-            variant={stats?.connected ? "default" : "secondary"}
-            className="gap-1.5"
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+              stats?.connected
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                : "bg-white/[0.06] text-white/40 border-white/10"
+            }`}
             data-testid="status-connection"
           >
             {stats?.connected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
             {stats?.connected ? "Connected" : "Not Connected"}
-          </Badge>
+          </span>
         )}
       </div>
 
@@ -65,7 +68,8 @@ export default function SupportDashboardPage() {
           title="Messages Sent"
           subtitle="Last 30 days"
           value={stats?.messagesSent}
-          icon={<MessageCircle className="w-5 h-5 text-muted-foreground" />}
+          icon={<MessageCircle className="w-5 h-5 text-blue-400" />}
+          iconBg="bg-blue-500/10"
           isLoading={isLoading}
           testId="stat-messages-sent"
         />
@@ -73,7 +77,8 @@ export default function SupportDashboardPage() {
           title="Delivered"
           subtitle="Successfully sent"
           value={stats?.delivered}
-          icon={<CheckCircle2 className="w-5 h-5 text-muted-foreground" />}
+          icon={<CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+          iconBg="bg-emerald-500/10"
           isLoading={isLoading}
           testId="stat-delivered"
         />
@@ -81,7 +86,8 @@ export default function SupportDashboardPage() {
           title="Failed"
           subtitle="Send errors"
           value={stats?.failed}
-          icon={<XCircle className="w-5 h-5 text-muted-foreground" />}
+          icon={<XCircle className="w-5 h-5 text-red-400" />}
+          iconBg="bg-red-500/10"
           isLoading={isLoading}
           testId="stat-failed"
         />
@@ -89,7 +95,8 @@ export default function SupportDashboardPage() {
           title="Active Conversations"
           subtitle="All time contacts"
           value={stats?.activeConversations}
-          icon={<Users className="w-5 h-5 text-muted-foreground" />}
+          icon={<Users className="w-5 h-5 text-violet-400" />}
+          iconBg="bg-violet-500/10"
           isLoading={isLoading}
           testId="stat-conversations"
         />
@@ -98,7 +105,7 @@ export default function SupportDashboardPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <Clock className="w-4 h-4 text-muted-foreground" />
+            <Clock className="w-4 h-4 text-blue-400" />
             Recent Activity
           </CardTitle>
         </CardHeader>
@@ -114,29 +121,29 @@ export default function SupportDashboardPage() {
               No activity yet. WhatsApp notifications will appear here once sent.
             </div>
           ) : (
-            <div className="divide-y">
+            <div className="divide-y divide-white/[0.06]">
               {stats.recentActivity.map((item) => (
-                <div key={item.id} className="py-3 flex items-center justify-between gap-4" data-testid={`row-activity-${item.id}`}>
+                <div key={item.id} className="py-3 flex items-center justify-between gap-4 hover:bg-blue-500/[0.06] -mx-2 px-2 rounded-md transition-colors" data-testid={`row-activity-${item.id}`}>
                   <div className="flex items-center gap-3 min-w-0">
                     {item.success ? (
-                      <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                     ) : (
-                      <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                      <XCircle className="w-4 h-4 text-red-400 shrink-0" />
                     )}
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate" data-testid={`text-order-${item.id}`}>
                         #{item.orderNumber} — {item.customerName}
                       </p>
                       {item.error && (
-                        <p className="text-xs text-red-500 truncate">{item.error}</p>
+                        <p className="text-xs text-red-400 truncate">{item.error}</p>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0 text-right">
                     {item.status && (
-                      <Badge variant="outline" className="text-xs hidden sm:inline-flex">
+                      <span className="text-xs hidden sm:inline-flex px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
                         {STATUS_LABELS[item.status] ?? item.status}
-                      </Badge>
+                      </span>
                     )}
                     {item.phone && (
                       <span className="text-xs text-muted-foreground hidden md:block">+{item.phone}</span>
@@ -160,6 +167,7 @@ function StatCard({
   subtitle,
   value,
   icon,
+  iconBg,
   isLoading,
   testId,
 }: {
@@ -167,6 +175,7 @@ function StatCard({
   subtitle: string;
   value: number | undefined;
   icon: React.ReactNode;
+  iconBg: string;
   isLoading: boolean;
   testId: string;
 }) {
@@ -183,7 +192,7 @@ function StatCard({
             )}
             <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
           </div>
-          <div className="p-2 bg-muted rounded-md">{icon}</div>
+          <div className={`p-2 ${iconBg} rounded-md`}>{icon}</div>
         </div>
       </CardContent>
     </Card>
