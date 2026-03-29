@@ -700,8 +700,8 @@ export default function SalesLauncher() {
           { num: 4, label: "Launch", section: "section-validation" },
           { num: 5, label: "History", section: "section-launch-history" },
         ].map((s, i) => (
-          <>
-            <div key={s.num} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap
+          <div key={s.num} className="flex items-center gap-1">
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap
               ${i === 0 ? "bg-blue-500/20 border border-blue-500/40 text-blue-400" : "bg-white/[0.04] border border-white/[0.08] text-white/40"}`}
               data-testid={`step-${s.num}`}>
               <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold
@@ -711,7 +711,7 @@ export default function SalesLauncher() {
               {s.label}
             </div>
             {i < 4 && <div className="w-4 h-px bg-white/[0.1] flex-shrink-0" />}
-          </>
+          </div>
         ))}
       </div>
 

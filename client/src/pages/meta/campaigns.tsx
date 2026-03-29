@@ -202,11 +202,11 @@ export default function MetaCampaigns() {
       case "ACTIVE":
         return <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" data-testid={`badge-status-${status}`}>Active</Badge>;
       case "PAUSED":
-        return <Badge variant="secondary" data-testid={`badge-status-${status}`}>Paused</Badge>;
+        return <Badge className="bg-white/[0.04] text-white/30 border border-white/[0.08]" data-testid={`badge-status-${status}`}>Paused</Badge>;
       case "ARCHIVED":
-        return <Badge variant="outline" data-testid={`badge-status-${status}`}>Archived</Badge>;
+        return <Badge className="bg-white/[0.04] text-white/20 border border-white/[0.06]" data-testid={`badge-status-${status}`}>Archived</Badge>;
       default:
-        return <Badge variant="outline" data-testid={`badge-status-${status}`}>{status}</Badge>;
+        return <Badge className="bg-white/[0.04] text-white/40 border border-white/[0.08]" data-testid={`badge-status-${status}`}>{status}</Badge>;
     }
   };
 
