@@ -1176,9 +1176,8 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            {/* CHART + RECENT ORDERS + COD */}
-            <div className="grid xl:grid-cols-3 gap-5">
-              <div className="xl:col-span-2 space-y-5">
+            {/* CHART + RECENT ORDERS */}
+            <div className="space-y-5">
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium">7-Day Order Volume</CardTitle>
@@ -1292,28 +1291,6 @@ export default function Dashboard() {
                     )}
                   </CardContent>
                 </Card>
-              </div>
-
-              <div className="space-y-4">
-                <Card className="border-l-[3px] border-l-amber-500">
-                  <CardContent className="p-4">
-                    <p className="text-xs font-medium text-amber-400/80 uppercase tracking-wide">COD Pending Collection</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-8 w-32 mt-2" />
-                    ) : (
-                      <p className="text-2xl font-semibold mt-1 tabular-nums" data-testid="text-cod-pending">
-                        PKR {stats?.codPending ?? "0"}
-                      </p>
-                    )}
-                    <Link href="/cod" className="mt-3 block">
-                      <Button variant="outline" size="sm" className="w-full" data-testid="button-view-cod">
-                        View Details
-                        <ArrowUpRight className="w-3.5 h-3.5 ml-1.5" />
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-              </div>
             </div>
           </>
         );
