@@ -1,4 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -125,7 +134,7 @@ function StatCard({
   }
 
   return (
-    <Card>
+    <Card className="border-l-[3px] border-l-primary">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0">
@@ -134,11 +143,11 @@ function StatCard({
             {trend !== undefined && (
               <div className="flex items-center gap-1 text-xs">
                 {trend >= 0 ? (
-                  <TrendingUp className="w-3 h-3 text-green-600 dark:text-green-400" />
+                  <TrendingUp className="w-3 h-3 text-green-500" />
                 ) : (
-                  <TrendingDown className="w-3 h-3 text-red-600 dark:text-red-400" />
+                  <TrendingDown className="w-3 h-3 text-red-500" />
                 )}
-                <span className={trend >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                <span className={trend >= 0 ? "text-green-500" : "text-red-500"}>
                   {trend >= 0 ? "+" : ""}{trend}%
                 </span>
                 <span className="text-muted-foreground">{trendLabel}</span>
@@ -156,6 +165,46 @@ function StatCard({
     </Card>
   );
 }
+
+function PerformanceBar({
+  label,
+  value,
+  subtitle,
+  barColor = "bg-primary",
+}: {
+  label: string;
+  value: number;
+  subtitle: string;
+  barColor?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
+        <span className="text-sm font-semibold tabular-nums">{value}%</span>
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+        <div
+          className={`h-full rounded-full ${barColor} transition-all duration-500`}
+          style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">{subtitle}</p>
+    </div>
+  );
+}
+
+const DASHBOARD_CHIP_COLORS: Record<string, string> = {
+  NEW: "border-slate-500/40 text-slate-300 hover:border-slate-400/60",
+  PENDING: "border-yellow-500/40 text-yellow-300 hover:border-yellow-400/60",
+  HOLD: "border-orange-500/40 text-orange-300 hover:border-orange-400/60",
+  READY_TO_SHIP: "border-blue-500/40 text-blue-300 hover:border-blue-400/60",
+  BOOKED: "border-indigo-500/40 text-indigo-300 hover:border-indigo-400/60",
+  FULFILLED: "border-purple-500/40 text-purple-300 hover:border-purple-400/60",
+  DELIVERED: "border-green-500/40 text-green-300 hover:border-green-400/60",
+  RETURN: "border-rose-500/40 text-rose-300 hover:border-rose-400/60",
+  CANCELLED: "border-red-500/40 text-red-300 hover:border-red-400/60",
+};
 
 function truncateStatus(status: string, wordCount: number = 3): string {
   const words = status.split(/\s+/);
@@ -882,6 +931,7 @@ function OrderSearchSection() {
 
 export default function Dashboard() {
   const { dateParams } = useDateRange();
+  const { user } = useAuth();
 
   const statsQueryParams = new URLSearchParams();
   if (dateParams.dateFrom) statsQueryParams.set("dateFrom", dateParams.dateFrom);
@@ -907,17 +957,33 @@ export default function Dashboard() {
     refetchInterval: 30000,
   });
 
+  const { data: dailyCounts, isLoading: dailyLoading } = useQuery<{ date: string; count: number; label: string }[]>({
+    queryKey: ["/api/dashboard/daily-counts"],
+    refetchInterval: 60000,
+  });
+
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  }, []);
+
+  const displayName = user?.sessionDisplayName || user?.firstName || "";
+  const todayLabel = new Date().toLocaleDateString("en-PK", { weekday: "long", month: "long", day: "numeric" });
+
   const handleRefresh = () => {
     refetchStats();
   };
 
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Your logistics overview</p>
+          <h1 className="text-xl font-semibold" data-testid="text-dashboard-greeting">
+            {greeting}{displayName ? `, ${displayName}` : ""}
+          </h1>
+          <p className="text-sm text-muted-foreground">{todayLabel} · Your logistics overview</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button onClick={handleRefresh} variant="outline" size="sm" data-testid="button-refresh-dashboard">
@@ -929,16 +995,16 @@ export default function Dashboard() {
 
       <AIInsightsBanner section="dashboard" />
 
-      {/* Search */}
       <OrderSearchSection />
 
-      {/* Section 1: Order Overview */}
       {(() => {
         const total = Object.values(workflowCounts ?? {}).reduce((sum, v) => sum + (v || 0), 0);
         const dispatched = (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
         const pending = (workflowCounts?.NEW ?? 0) + (workflowCounts?.PENDING ?? 0) + (workflowCounts?.HOLD ?? 0) + (workflowCounts?.READY_TO_SHIP ?? 0) + (workflowCounts?.BOOKED ?? 0);
         const delivered = workflowCounts?.DELIVERED ?? 0;
         const cancelled = workflowCounts?.CANCELLED ?? 0;
+        const returned = workflowCounts?.RETURN ?? 0;
+        const fulfilled = workflowCounts?.FULFILLED ?? 0;
 
         const fmtCod = (amount: number) => `COD: PKR ${Math.round(amount).toLocaleString()}`;
         const totalCod = Object.values(workflowAmounts).reduce((sum, v) => sum + (v || 0), 0);
@@ -947,10 +1013,18 @@ export default function Dashboard() {
         const pendingCod = (workflowAmounts.NEW ?? 0) + (workflowAmounts.PENDING ?? 0) + (workflowAmounts.HOLD ?? 0) + (workflowAmounts.READY_TO_SHIP ?? 0) + (workflowAmounts.BOOKED ?? 0);
         const cancelledCod = workflowAmounts.CANCELLED ?? 0;
 
+        const fulfillmentRatio = total > 0 ? Math.round((dispatched / total) * 100) : 0;
+        const deliveryRatio = dispatched > 0 ? Math.round((delivered / dispatched) * 100) : 0;
+        const returnRatio = dispatched > 0 ? Math.round((returned / dispatched) * 100) : 0;
+        const cancellationRatio = total > 0 ? Math.round((cancelled / total) * 100) : 0;
+        const pendingRatio = dispatched > 0 ? Math.round((fulfilled / dispatched) * 100) : 0;
+
         return (
-          <div className="space-y-3">
-            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-order-overview">Order Overview</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <>
+            <div
+              className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3"
+              data-testid="section-order-overview"
+            >
               <StatCard
                 title="Total Orders"
                 value={countsLoading ? "—" : total.toLocaleString()}
@@ -972,7 +1046,7 @@ export default function Dashboard() {
                 title="Delivered"
                 value={countsLoading ? "—" : delivered.toLocaleString()}
                 icon={CheckCircle2}
-                iconColor="text-muted-foreground"
+                iconColor="text-emerald-500"
                 subtitle={countsLoading ? undefined : fmtCod(deliveredCod)}
                 isLoading={countsLoading}
               />
@@ -980,7 +1054,7 @@ export default function Dashboard() {
                 title="Pending"
                 value={countsLoading ? "—" : pending.toLocaleString()}
                 icon={Clock}
-                iconColor="text-muted-foreground"
+                iconColor="text-amber-500"
                 subtitle={countsLoading ? undefined : fmtCod(pendingCod)}
                 isLoading={countsLoading}
               />
@@ -988,196 +1062,242 @@ export default function Dashboard() {
                 title="Cancelled"
                 value={countsLoading ? "—" : cancelled.toLocaleString()}
                 icon={Ban}
-                iconColor="text-muted-foreground"
+                iconColor="text-red-500"
                 subtitle={countsLoading ? undefined : fmtCod(cancelledCod)}
                 isLoading={countsLoading}
               />
             </div>
-          </div>
-        );
-      })()}
 
-      {/* Section 2: Performance Metrics */}
-      {(() => {
-        const total = Object.values(workflowCounts ?? {}).reduce((sum, v) => sum + (v || 0), 0);
-        const dispatched = (workflowCounts?.FULFILLED ?? 0) + (workflowCounts?.DELIVERED ?? 0) + (workflowCounts?.RETURN ?? 0);
-        const delivered = workflowCounts?.DELIVERED ?? 0;
-        const returned = workflowCounts?.RETURN ?? 0;
-        const cancelled = workflowCounts?.CANCELLED ?? 0;
-        const fulfilled = workflowCounts?.FULFILLED ?? 0;
+            <div className="grid xl:grid-cols-3 gap-5">
+              <div className="xl:col-span-2 space-y-5">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">7-Day Order Volume</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {dailyLoading ? (
+                      <Skeleton className="h-[160px] w-full" />
+                    ) : (
+                      <ResponsiveContainer width="100%" height={160}>
+                        <AreaChart data={dailyCounts ?? []} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="orderGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
+                              <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <XAxis
+                            dataKey="label"
+                            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                            tickLine={false}
+                            axisLine={false}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                            tickLine={false}
+                            axisLine={false}
+                            allowDecimals={false}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "hsl(var(--card))",
+                              border: "1px solid hsl(var(--border))",
+                              borderRadius: "8px",
+                              fontSize: "12px",
+                              color: "hsl(var(--foreground))",
+                            }}
+                            formatter={(v: number) => [v, "Orders"]}
+                            labelFormatter={(l) => l}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="count"
+                            stroke="hsl(var(--primary))"
+                            strokeWidth={2}
+                            fill="url(#orderGradient)"
+                            dot={false}
+                            activeDot={{ r: 4, fill: "hsl(var(--primary))" }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )}
+                  </CardContent>
+                </Card>
 
-        const fulfillmentRatio = total > 0 ? Math.round((dispatched / total) * 100) : 0;
-        const deliveryRatio = dispatched > 0 ? Math.round((delivered / dispatched) * 100) : 0;
-        const returnRatio = dispatched > 0 ? Math.round((returned / dispatched) * 100) : 0;
-        const cancellationRatio = total > 0 ? Math.round((cancelled / total) * 100) : 0;
-        const pendingRatio = dispatched > 0 ? Math.round((fulfilled / dispatched) * 100) : 0;
-
-        return (
-          <div className="space-y-3">
-            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide" data-testid="section-performance-metrics">Performance Metrics</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-              <StatCard
-                title="Fulfillment Ratio"
-                value={countsLoading ? "—" : `${fulfillmentRatio}%`}
-                icon={BarChart3}
-                iconColor="text-muted-foreground"
-                subtitle={`${dispatched} dispatched / ${total} total`}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Cancellation Ratio"
-                value={countsLoading ? "—" : `${cancellationRatio}%`}
-                icon={X}
-                iconColor="text-muted-foreground"
-                subtitle={`${cancelled} cancelled / ${total} total`}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Delivery Ratio"
-                value={countsLoading ? "—" : `${deliveryRatio}%`}
-                icon={Target}
-                iconColor="text-muted-foreground"
-                subtitle={`${delivered} delivered / ${dispatched} dispatched`}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Pending Ratio"
-                value={countsLoading ? "—" : `${pendingRatio}%`}
-                icon={Clock}
-                iconColor="text-muted-foreground"
-                subtitle={`${fulfilled} fulfilled / ${dispatched} dispatched`}
-                isLoading={countsLoading}
-              />
-              <StatCard
-                title="Return Ratio"
-                value={countsLoading ? "—" : `${returnRatio}%`}
-                icon={RotateCcw}
-                iconColor="text-muted-foreground"
-                subtitle={`${returned} returned / ${dispatched} dispatched`}
-                isLoading={countsLoading}
-              />
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Status Breakdown */}
-      <Card>
-        <CardContent className="p-3">
-          {countsLoading ? (
-            <div className="flex gap-2 flex-wrap">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-6 w-20 rounded-md" />
-              ))}
-            </div>
-          ) : workflowCounts ? (
-            <div className="flex gap-1.5 flex-wrap" data-testid="status-breakdown-chips">
-              {[
-                { key: 'NEW', label: 'New' },
-                { key: 'PENDING', label: 'Pending' },
-                { key: 'HOLD', label: 'Hold' },
-                { key: 'READY_TO_SHIP', label: 'Ready to Ship' },
-                { key: 'BOOKED', label: 'Booked' },
-                { key: 'FULFILLED', label: 'Fulfilled' },
-                { key: 'DELIVERED', label: 'Delivered' },
-                { key: 'RETURN', label: 'Return' },
-                { key: 'CANCELLED', label: 'Cancelled' },
-              ]
-                .filter(s => (workflowCounts[s.key] || 0) > 0)
-                .map(s => (
-                  <Link key={s.key} href={`/orders?workflowStatus=${s.key}`}>
-                    <Badge
-                      variant="secondary"
-                      className="cursor-pointer text-xs"
-                      data-testid={`chip-dashboard-${s.key}`}
-                    >
-                      {s.label}
-                      <span className="font-semibold ml-1">{(workflowCounts[s.key] || 0).toLocaleString()}</span>
-                    </Badge>
-                  </Link>
-                ))}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {/* COD Pending Card */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">COD Pending Collection</p>
-              <p className="text-2xl font-semibold mt-1">PKR {stats?.codPending ?? "0"}</p>
-            </div>
-            <Link href="/cod">
-              <Button variant="outline" size="sm" data-testid="button-view-cod">
-                View Details
-                <ArrowUpRight className="w-3.5 h-3.5 ml-1.5" />
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent Orders */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
-          <CardTitle className="text-sm font-medium">Recent Orders</CardTitle>
-          <Link href="/orders">
-            <Button variant="ghost" size="sm" data-testid="button-view-all-orders">
-              View All
-              <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
-            </Button>
-          </Link>
-        </CardHeader>
-        <CardContent className="p-0">
-          {ordersLoading ? (
-            <div className="divide-y">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center justify-between px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="space-y-1.5">
-                      <Skeleton className="h-4 w-20" />
-                      <Skeleton className="h-3 w-28" />
-                    </div>
-                  </div>
-                  <Skeleton className="h-5 w-16" />
-                </div>
-              ))}
-            </div>
-          ) : recentOrders && recentOrders.length > 0 ? (
-            <div className="divide-y">
-              {recentOrders.map((order) => (
-                <Link key={order.id} href={`/orders/detail/${order.id}`}>
-                  <div className="flex items-center justify-between px-4 py-3 hover-elevate cursor-pointer" data-testid={`order-row-${order.id}`}>
-                    <div>
-                      <p className="font-medium text-sm">{String(order.orderNumber || '').replace(/^#/, '')}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {order.customerName} • {order.city}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right hidden sm:block">
-                        <p className="text-sm font-medium">PKR {order.totalAmount}</p>
-                        <p className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</p>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium" data-testid="section-performance-metrics">Performance Metrics</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {countsLoading ? (
+                      <div className="space-y-4">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <Skeleton key={i} className="h-8 w-full" />
+                        ))}
                       </div>
-                      {getStatusBadge(order.shipmentStatus || "Unfulfilled", order.workflowStatus)}
-                    </div>
-                  </div>
-                </Link>
-              ))}
+                    ) : (
+                      <div className="space-y-4">
+                        <PerformanceBar
+                          label="Fulfillment Ratio"
+                          value={fulfillmentRatio}
+                          subtitle={`${dispatched} dispatched of ${total} total`}
+                        />
+                        <PerformanceBar
+                          label="Delivery Ratio"
+                          value={deliveryRatio}
+                          subtitle={`${delivered} delivered of ${dispatched} dispatched`}
+                          barColor="bg-emerald-500"
+                        />
+                        <PerformanceBar
+                          label="Pending in Transit"
+                          value={pendingRatio}
+                          subtitle={`${fulfilled} fulfilled of ${dispatched} dispatched`}
+                          barColor="bg-sky-500"
+                        />
+                        <PerformanceBar
+                          label="Return Ratio"
+                          value={returnRatio}
+                          subtitle={`${returned} returned of ${dispatched} dispatched`}
+                          barColor="bg-rose-500"
+                        />
+                        <PerformanceBar
+                          label="Cancellation Ratio"
+                          value={cancellationRatio}
+                          subtitle={`${cancelled} cancelled of ${total} total`}
+                          barColor="bg-red-500"
+                        />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
+                    <CardTitle className="text-sm font-medium">Recent Orders</CardTitle>
+                    <Link href="/orders">
+                      <Button variant="ghost" size="sm" data-testid="button-view-all-orders">
+                        View All
+                        <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+                      </Button>
+                    </Link>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {ordersLoading ? (
+                      <div className="divide-y divide-border">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <div key={i} className="flex items-center justify-between px-4 py-3">
+                            <div className="space-y-1.5">
+                              <Skeleton className="h-4 w-20" />
+                              <Skeleton className="h-3 w-28" />
+                            </div>
+                            <Skeleton className="h-5 w-16" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : recentOrders && recentOrders.length > 0 ? (
+                      <div className="divide-y divide-border">
+                        {recentOrders.map((order) => (
+                          <Link key={order.id} href={`/orders/detail/${order.id}`}>
+                            <div
+                              className="flex items-center justify-between px-4 py-3 hover:bg-primary/5 cursor-pointer transition-colors"
+                              data-testid={`order-row-${order.id}`}
+                            >
+                              <div>
+                                <p className="font-medium text-sm">{String(order.orderNumber || '').replace(/^#/, '')}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {order.customerName} • {order.city}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="text-right hidden sm:block">
+                                  <p className="text-sm font-medium">PKR {order.totalAmount}</p>
+                                  <p className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</p>
+                                </div>
+                                {getStatusBadge(order.shipmentStatus || "Unfulfilled", order.workflowStatus)}
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-10 px-4">
+                        <Package className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+                        <p className="text-sm font-medium mb-0.5">No orders yet</p>
+                        <p className="text-xs text-muted-foreground">
+                          Orders from your Shopify store will appear here
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="space-y-4">
+                <Card className="border-l-[3px] border-l-amber-500">
+                  <CardContent className="p-4">
+                    <p className="text-xs font-medium text-amber-400/80 uppercase tracking-wide">COD Pending Collection</p>
+                    {statsLoading ? (
+                      <Skeleton className="h-8 w-32 mt-2" />
+                    ) : (
+                      <p className="text-2xl font-semibold mt-1 tabular-nums" data-testid="text-cod-pending">
+                        PKR {stats?.codPending ?? "0"}
+                      </p>
+                    )}
+                    <Link href="/cod" className="mt-3 block">
+                      <Button variant="outline" size="sm" className="w-full" data-testid="button-view-cod">
+                        View Details
+                        <ArrowUpRight className="w-3.5 h-3.5 ml-1.5" />
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Order Status</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {countsLoading ? (
+                      <div className="flex gap-2 flex-wrap">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                          <Skeleton key={i} className="h-6 w-20 rounded-full" />
+                        ))}
+                      </div>
+                    ) : workflowCounts ? (
+                      <div className="flex gap-1.5 flex-wrap" data-testid="status-breakdown-chips">
+                        {[
+                          { key: 'NEW', label: 'New' },
+                          { key: 'PENDING', label: 'Pending' },
+                          { key: 'HOLD', label: 'Hold' },
+                          { key: 'READY_TO_SHIP', label: 'Ready to Ship' },
+                          { key: 'BOOKED', label: 'Booked' },
+                          { key: 'FULFILLED', label: 'Fulfilled' },
+                          { key: 'DELIVERED', label: 'Delivered' },
+                          { key: 'RETURN', label: 'Return' },
+                          { key: 'CANCELLED', label: 'Cancelled' },
+                        ]
+                          .filter(s => (workflowCounts[s.key] || 0) > 0)
+                          .map(s => (
+                            <Link key={s.key} href={`/orders?workflowStatus=${s.key}`}>
+                              <Badge
+                                variant="outline"
+                                className={`cursor-pointer text-xs bg-transparent ${DASHBOARD_CHIP_COLORS[s.key] || ""}`}
+                                data-testid={`chip-dashboard-${s.key}`}
+                              >
+                                {s.label}
+                                <span className="font-semibold ml-1">{(workflowCounts[s.key] || 0).toLocaleString()}</span>
+                              </Badge>
+                            </Link>
+                          ))}
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-          ) : (
-            <div className="text-center py-10 px-4">
-              <Package className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-sm font-medium mb-0.5">No orders yet</p>
-              <p className="text-xs text-muted-foreground">
-                Orders from your Shopify store will appear here
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          </>
+        );
+      })()}
     </div>
   );
 }

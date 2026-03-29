@@ -700,6 +700,43 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/dashboard/daily-counts", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const days = Math.min(parseInt(req.query.days as string) || 7, 30);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      const cutoffIso = cutoff.toISOString();
+      const rows = await db.execute(sql`
+        SELECT
+          TO_CHAR(order_date AT TIME ZONE 'Asia/Karachi', 'YYYY-MM-DD') AS day,
+          COUNT(*)::int AS count
+        FROM orders
+        WHERE merchant_id = ${merchantId}
+          AND order_date >= ${cutoffIso}::timestamptz
+        GROUP BY day
+        ORDER BY day ASC
+      `);
+      const countMap: Record<string, number> = {};
+      for (const r of rows as any[]) {
+        countMap[r.day] = r.count;
+      }
+      const result = [];
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split("T")[0];
+        const label = d.toLocaleDateString("en-PK", { weekday: "short" });
+        result.push({ date: dateStr, count: countMap[dateStr] || 0, label });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching daily counts:", error);
+      res.status(500).json({ message: "Failed to fetch daily counts" });
+    }
+  });
+
   // Orders
   app.get("/api/orders/recent", isAuthenticated, async (req, res) => {
     try {
