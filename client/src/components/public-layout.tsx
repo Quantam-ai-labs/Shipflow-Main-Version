@@ -94,21 +94,22 @@ function PublicFooter() {
           <div className="col-span-2 md:col-span-4 lg:col-span-2">
             <h4 className="font-semibold text-sm mb-4 text-white/70">Stay Updated</h4>
             <p className="text-sm text-white/40 mb-3">Get product updates and tips for Pakistani merchants.</p>
-            <div className="flex gap-2">
+            <div className="space-y-2">
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-white/25 focus:outline-none focus:border-violet-500/50 focus:bg-white/8 transition-all"
+                className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-white/25 focus:outline-none focus:border-violet-500/50 focus:bg-white/8 transition-all"
                 data-testid="input-newsletter-email"
               />
               <button
                 onClick={() => setEmail("")}
-                className="px-3 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-emerald-500 text-white text-sm font-medium hover:opacity-90 transition-opacity shrink-0"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-emerald-500 text-white text-sm font-semibold hover:opacity-90 transition-opacity"
                 data-testid="button-newsletter-subscribe"
               >
                 <Send className="w-3.5 h-3.5" />
+                Stay updated
               </button>
             </div>
           </div>
