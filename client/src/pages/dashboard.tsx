@@ -647,10 +647,10 @@ function OrderSearchSection() {
             <DialogTitle className="text-white">Update Remark</DialogTitle>
             <DialogDescription className="text-white/40">Order #{selectedRemarkOrder?.orderNumber}</DialogDescription>
           </DialogHeader>
-          <Textarea value={remarkValue} onChange={e => setRemarkValue(e.target.value)} placeholder="Enter remark..." className="bg-white/5 border-white/10 text-white placeholder:text-white/30" rows={3} />
+          <Textarea value={remarkValue} onChange={e => setRemarkValue(e.target.value)} placeholder="Enter remark..." className="bg-white/5 border-white/10 text-white placeholder:text-white/30" rows={3} data-testid="textarea-remark" />
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" className="text-white/40" onClick={() => setRemarkDialogOpen(false)}>Cancel</Button>
-            <Button className="bg-blue-600 hover:bg-blue-500 text-white" onClick={() => selectedRemarkOrder && updateRemarkMutation.mutate({ orderId: selectedRemarkOrder.id, value: remarkValue })} disabled={updateRemarkMutation.isPending}>
+            <Button variant="ghost" className="text-white/40" onClick={() => setRemarkDialogOpen(false)} data-testid="button-cancel-remark">Cancel</Button>
+            <Button className="bg-blue-600 hover:bg-blue-500 text-white" onClick={() => selectedRemarkOrder && updateRemarkMutation.mutate({ orderId: selectedRemarkOrder.id, value: remarkValue })} disabled={updateRemarkMutation.isPending} data-testid="button-save-remark">
               {updateRemarkMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Save
             </Button>
           </div>
@@ -669,8 +669,8 @@ function OrderSearchSection() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-white/5 border-white/10 text-white hover:bg-white/10">Keep</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-500 text-white"
+            <AlertDialogCancel className="bg-white/5 border-white/10 text-white hover:bg-white/10" data-testid="button-cancel-confirm-keep">Keep</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-500 text-white" data-testid="button-cancel-confirm-action"
               onClick={() => {
                 if (!cancelConfirm) return;
                 if (cancelConfirm.type === "courier") cancelBookingMutation.mutate(cancelConfirm.orderId);
@@ -684,12 +684,6 @@ function OrderSearchSection() {
       </AlertDialog>
     </>
   );
-}
-
-interface TrendDataPoint {
-  day: string;
-  date: string;
-  orders: number;
 }
 
 /* ── Main Dashboard ──────────────────────────────────────────────────────── */
@@ -722,10 +716,6 @@ export default function Dashboard() {
     queryKey: ["/api/orders/recent"],
   });
 
-  const { data: trendData, isLoading: trendLoading } = useQuery<TrendDataPoint[]>({
-    queryKey: ["/api/dashboard/trend"],
-  });
-
   const handleRefresh = async () => {
     await queryClient.invalidateQueries({ predicate: q => String(q.queryKey[0]).startsWith("/api/dashboard") || String(q.queryKey[0]).startsWith("/api/orders") });
     toast({ title: "Dashboard refreshed" });
@@ -744,6 +734,17 @@ export default function Dashboard() {
   const returnRatio        = dispatched > 0 ? Math.round((returned   / dispatched) * 100)  : 0;
   const cancellationRatio  = total      > 0 ? Math.round((cancelled  / total) * 100)       : 0;
   const pendingRatio       = dispatched > 0 ? Math.round((fulfilled  / dispatched) * 100)  : 0;
+
+  /* ── Pipeline chart data (derived from existing workflowCounts) ── */
+  const chartData = [
+    { name: "New",     orders: workflowCounts?.NEW          ?? 0 },
+    { name: "Pending", orders: workflowCounts?.PENDING      ?? 0 },
+    { name: "Booked",  orders: workflowCounts?.BOOKED       ?? 0 },
+    { name: "Ship",    orders: workflowCounts?.READY_TO_SHIP ?? 0 },
+    { name: "Transit", orders: workflowCounts?.FULFILLED    ?? 0 },
+    { name: "Deliver", orders: workflowCounts?.DELIVERED    ?? 0 },
+    { name: "Return",  orders: workflowCounts?.RETURN       ?? 0 },
+  ];
 
   return (
     <div className="relative min-h-full space-y-6" style={{ background: BG, margin: "-24px", padding: "24px" }}>
@@ -812,20 +813,20 @@ export default function Dashboard() {
       {/* ── Two-column grid: chart left, metrics right ── */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
 
-        {/* Chart (left, wider) — 7-day order trend */}
-        <div style={darkCard} className="xl:col-span-2 p-5">
+        {/* Chart (left, wider) — order pipeline distribution */}
+        <div style={darkCard} className="xl:col-span-2 p-5" data-testid="section-order-pipeline-chart">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-sm font-semibold" style={{ color: TEXT }}>7-Day Order Trend</h3>
-              <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>Daily orders placed in the last week</p>
+              <h3 className="text-sm font-semibold" style={{ color: TEXT }}>Order Pipeline</h3>
+              <p className="text-xs mt-0.5" style={{ color: TEXT_MUTED }}>Current distribution by stage</p>
             </div>
             <BarChart3 className="w-4 h-4" style={{ color: TEXT_MUTED }} />
           </div>
-          {trendLoading ? (
+          {countsLoading ? (
             <Skeleton className="h-40 w-full bg-white/5 rounded-xl" />
           ) : (
             <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={trendData ?? []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="blueGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
@@ -833,7 +834,7 @@ export default function Dashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="day" tick={{ fill: TEXT_MUTED, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" tick={{ fill: TEXT_MUTED, fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: TEXT_MUTED, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip content={<DarkTooltip />} />
                 <Area type="monotone" dataKey="orders" name="Orders" stroke="#60a5fa" strokeWidth={2} fill="url(#blueGrad)" dot={{ fill: "#60a5fa", r: 3, strokeWidth: 0 }} activeDot={{ r: 5, fill: "#3b82f6" }} />
