@@ -90,7 +90,7 @@ function NotificationItem({ n, onResolve, resolving, onNavigate, closePopover }:
           <p className="text-sm font-medium leading-snug">{n.title}</p>
           <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.message}</p>
           <p className="text-[11px] text-muted-foreground mt-1">
-            {formatDistanceToNow(new Date(n.createdAt), { addSuffix: true })}
+            {(() => { try { return formatDistanceToNow(new Date(n.createdAt), { addSuffix: true }); } catch { return ""; } })()}
           </p>
         </div>
         {n.resolvable && !n.resolvedAt && (

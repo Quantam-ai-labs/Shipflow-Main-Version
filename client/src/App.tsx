@@ -18,19 +18,47 @@ import { refreshAllData, syncAndRefreshAllData, apiRequest } from "./lib/queryCl
 import { Link } from "wouter";
 import { NotificationBell } from "@/components/notification-bell";
 
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+function isChunkLoadError(error: Error): boolean {
+  const msg = error?.message || "";
+  const name = error?.name || "";
+  return (
+    name === "ChunkLoadError" ||
+    msg.includes("Failed to fetch dynamically imported module") ||
+    msg.includes("Loading chunk") ||
+    msg.includes("error loading dynamically imported module") ||
+    msg.includes("Importing a module script failed") ||
+    msg.includes("Unable to preload CSS")
+  );
+}
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; isChunkError: boolean }> {
   constructor(props: { children: ReactNode }) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, isChunkError: false };
   }
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, isChunkError: isChunkLoadError(error) };
   }
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("App crashed:", error, errorInfo);
+    if (isChunkLoadError(error)) {
+      // New deployment detected — silently reload to get fresh chunks
+      window.location.reload();
+    }
   }
   render() {
     if (this.state.hasError) {
+      if (this.state.isChunkError) {
+        return (
+          <div className="flex items-center justify-center min-h-screen bg-background">
+            <div className="text-center space-y-4 p-8">
+              <RefreshCw className="w-12 h-12 text-primary mx-auto animate-spin" />
+              <h2 className="text-xl font-semibold">Loading new version…</h2>
+              <p className="text-muted-foreground">A new update is available. Refreshing automatically.</p>
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="flex items-center justify-center min-h-screen bg-background">
           <div className="text-center space-y-4 p-8">
