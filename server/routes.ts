@@ -7413,29 +7413,53 @@ export async function registerRoutes(
 
       const { headerType, headerText, body, footer, buttons, category } = req.body;
 
-      const components: any[] = [];
       const effectiveHeaderType = headerType ?? tpl.headerType;
-      if (effectiveHeaderType && effectiveHeaderType !== "none") {
-        components.push({
-          type: "HEADER",
-          format: effectiveHeaderType.toUpperCase(),
-          ...(effectiveHeaderType === "text" ? { text: (headerText ?? tpl.headerText) || "" } : {}),
-        });
-      }
-      const effectiveBody = body ?? tpl.body;
-      if (effectiveBody) components.push({ type: "BODY", text: effectiveBody });
-      const effectiveFooter = footer ?? tpl.footer;
-      if (effectiveFooter) components.push({ type: "FOOTER", text: effectiveFooter });
+      const effectiveHeaderText = headerText !== undefined ? headerText : (tpl.headerText || "");
+      const effectiveBody = body ?? tpl.body ?? "";
+      const effectiveFooter = footer !== undefined ? footer : (tpl.footer || "");
       const effectiveButtons: any[] = buttons ?? (tpl.buttons as any[]) ?? [];
+
+      // Build Meta API components — transform named {{varName}} placeholders to indexed {{1}}
+      // and include example values, exactly like the create route does
+      const components: any[] = [];
+
+      if (effectiveHeaderType && effectiveHeaderType !== "none" && effectiveHeaderType === "text") {
+        const hdrText = String(effectiveHeaderText).slice(0, 60)
+          .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu, "")
+          .replace(/[*_~`\n\r]/g, "")
+          .trim();
+        const hdrVarMatches = hdrText.match(/\{\{\w+\}\}/g) ?? [];
+        const indexedHdr = hdrVarMatches.reduce((txt, _v, i) => txt.replace(_v, `{{${i + 1}}}`), hdrText);
+        const hdrComponent: any = { type: "HEADER", format: "TEXT", text: indexedHdr };
+        if (hdrVarMatches.length > 0) {
+          hdrComponent.example = { header_text: hdrVarMatches.map(v => v.replace(/[{}]/g, "")) };
+        }
+        components.push(hdrComponent);
+      } else if (effectiveHeaderType && effectiveHeaderType !== "none" && effectiveHeaderType !== "text") {
+        components.push({ type: "HEADER", format: effectiveHeaderType.toUpperCase() });
+      }
+
+      if (effectiveBody) {
+        const varMatches = effectiveBody.match(/\{\{\w+\}\}/g) ?? [];
+        const indexedBody = varMatches.reduce((txt: string, _v: string, i: number) => txt.replace(_v, `{{${i + 1}}}`), effectiveBody);
+        const bodyComponent: any = { type: "BODY", text: indexedBody };
+        if (varMatches.length > 0) {
+          bodyComponent.example = { body_text: [varMatches.map((v: string) => v.replace(/[{}]/g, ""))] };
+        }
+        components.push(bodyComponent);
+      }
+
+      if (effectiveFooter) {
+        components.push({ type: "FOOTER", text: String(effectiveFooter).slice(0, 60) });
+      }
+
       if (effectiveButtons.length) {
-        components.push({
-          type: "BUTTONS",
-          buttons: effectiveButtons.map((b: any) => {
-            if (b.type === "url") return { type: "URL", text: b.text, url: b.url };
-            if (b.type === "phone") return { type: "PHONE_NUMBER", text: b.text, phone_number: b.url };
-            return { type: "QUICK_REPLY", text: b.text };
-          }),
+        const metaButtons = effectiveButtons.map((b: any) => {
+          if (b.type === "url") return { type: "URL", text: b.text || "Link", url: b.url };
+          if (b.type === "phone") return { type: "PHONE_NUMBER", text: b.text || "Call", phone_number: b.url };
+          return { type: "QUICK_REPLY", text: b.text || "Reply" };
         });
+        components.push({ type: "BUTTONS", buttons: metaButtons });
       }
 
       if (tpl.metaId && accessToken) {
@@ -7479,8 +7503,8 @@ export async function registerRoutes(
         language: tpl.language,
         category: category ?? tpl.category,
         headerType: effectiveHeaderType,
-        headerText: headerText !== undefined ? (headerText ? String(headerText).slice(0, 60) : null) : tpl.headerText,
-        body: effectiveBody ?? null,
+        headerText: effectiveHeaderText ? String(effectiveHeaderText).slice(0, 60) : null,
+        body: effectiveBody || null,
         footer: effectiveFooter ? String(effectiveFooter).slice(0, 60) : null,
         buttons: effectiveButtons,
         status: newStatus,
