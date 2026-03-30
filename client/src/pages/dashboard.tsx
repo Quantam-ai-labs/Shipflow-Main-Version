@@ -183,7 +183,7 @@ function KpiMetricCard({
 }) {
   if (isLoading) {
     return (
-      <Card className="bg-[#0d1322] border-white/[0.08]">
+      <Card className="bg-card border-border">
         <CardContent className="p-4">
           <div className="space-y-2">
             <Skeleton className="h-3 w-24" />
@@ -196,15 +196,15 @@ function KpiMetricCard({
   }
 
   return (
-    <Card className="bg-[#0d1322] border-white/[0.08]">
+    <Card className="bg-card border-border">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1 min-w-0">
-            <p className="text-[11px] font-medium text-white/40 uppercase tracking-wider">{label}</p>
-            <p className="text-2xl font-semibold text-white tabular-nums">{value}%</p>
-            <p className="text-[11px] text-white/40">{subtitle}</p>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+            <p className="text-2xl font-semibold text-foreground tabular-nums">{value}%</p>
+            <p className="text-[11px] text-muted-foreground">{subtitle}</p>
           </div>
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-white/[0.06] shrink-0">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-muted shrink-0">
             <Icon className={`w-4 h-4 ${iconColor}`} />
           </div>
         </div>
@@ -214,15 +214,15 @@ function KpiMetricCard({
 }
 
 const DASHBOARD_CHIP_COLORS: Record<string, string> = {
-  NEW: "border-slate-500/40 text-slate-300 hover:border-slate-400/60",
-  PENDING: "border-yellow-500/40 text-yellow-300 hover:border-yellow-400/60",
-  HOLD: "border-orange-500/40 text-orange-300 hover:border-orange-400/60",
-  READY_TO_SHIP: "border-blue-500/40 text-blue-300 hover:border-blue-400/60",
-  BOOKED: "border-indigo-500/40 text-indigo-300 hover:border-indigo-400/60",
-  FULFILLED: "border-purple-500/40 text-purple-300 hover:border-purple-400/60",
-  DELIVERED: "border-green-500/40 text-green-300 hover:border-green-400/60",
-  RETURN: "border-rose-500/40 text-rose-300 hover:border-rose-400/60",
-  CANCELLED: "border-red-500/40 text-red-300 hover:border-red-400/60",
+  NEW: "border-slate-500/40 text-slate-600 dark:text-slate-300 hover:border-slate-400/60",
+  PENDING: "border-yellow-500/40 text-yellow-600 dark:text-yellow-300 hover:border-yellow-400/60",
+  HOLD: "border-orange-500/40 text-orange-600 dark:text-orange-300 hover:border-orange-400/60",
+  READY_TO_SHIP: "border-blue-500/40 text-blue-600 dark:text-blue-300 hover:border-blue-400/60",
+  BOOKED: "border-indigo-500/40 text-indigo-600 dark:text-indigo-300 hover:border-indigo-400/60",
+  FULFILLED: "border-purple-500/40 text-purple-600 dark:text-purple-300 hover:border-purple-400/60",
+  DELIVERED: "border-green-500/40 text-green-600 dark:text-green-300 hover:border-green-400/60",
+  RETURN: "border-rose-500/40 text-rose-600 dark:text-rose-300 hover:border-rose-400/60",
+  CANCELLED: "border-red-500/40 text-red-600 dark:text-red-300 hover:border-red-400/60",
 };
 
 function truncateStatus(status: string, wordCount: number = 3): string {
@@ -1136,9 +1136,9 @@ export default function Dashboard() {
             </div>
 
             {/* ORDER STATUS CHIPS — full-width strip */}
-            <Card className="bg-[#0d1322] border-white/[0.08]">
+            <Card className="bg-card border-border">
               <CardContent className="p-4">
-                <p className="text-[11px] font-medium text-white/40 uppercase tracking-wider mb-3">Order Status</p>
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Order Status</p>
                 {countsLoading ? (
                   <div className="flex gap-2 flex-wrap">
                     {Array.from({ length: 6 }).map((_, i) => (
