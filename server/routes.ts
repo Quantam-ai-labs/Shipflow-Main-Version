@@ -7335,7 +7335,9 @@ export async function registerRoutes(
               buttons.push({
                 type: btn.type === "URL" ? "url" : btn.type === "PHONE_NUMBER" ? "phone" : "quick_reply",
                 text: btn.text || "",
-                url: btn.url,
+                // URL buttons use btn.url; PHONE_NUMBER buttons use btn.phone_number
+                // Both are stored in the `url` field so the edit dialog can prefill them correctly
+                url: btn.type === "PHONE_NUMBER" ? (btn.phone_number || btn.url) : btn.url,
               });
             }
           }
