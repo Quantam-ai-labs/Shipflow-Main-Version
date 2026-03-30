@@ -7512,7 +7512,7 @@ export async function registerRoutes(
         metaId: tpl.metaId ?? undefined,
       });
 
-      res.json({ template: updated });
+      res.json({ template: updated, submittedToMeta: metaSubmitSucceeded });
     } catch (error: any) {
       console.error("[WA Template Edit] Error:", error.message);
       res.status(500).json({ error: error.message });

@@ -1342,10 +1342,14 @@ export default function SupportTemplatesPage() {
       const res = await apiRequest("PUT", `/api/wa-meta-templates/${id}`, data);
       return await res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/wa-meta-templates"] });
       setEditingTpl(null);
-      toast({ title: "Template updated", description: "Submitted for re-approval. This may take 24-48 hours." });
+      if (data?.submittedToMeta) {
+        toast({ title: "Template updated", description: "Sent to Meta for re-approval. May take 24-48 hours." });
+      } else {
+        toast({ title: "Template saved locally", description: "Changes saved. Re-sync your templates to push updates to Meta." });
+      }
     },
     onError: (err: any) => toast({ title: "Update failed", description: err?.message || "Could not update template", variant: "destructive" }),
   });
