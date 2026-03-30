@@ -8396,8 +8396,14 @@ export async function registerRoutes(
       if (waType === "audio" && (mime.startsWith("audio/webm") || mime === "audio/webm")) {
         try {
           const { spawn } = await import("child_process");
+          // Prefer system ffmpeg; fall back to the bundled ffmpeg-static binary
+          let ffmpegBin = "ffmpeg";
+          try {
+            const ffmpegStatic = (await import("ffmpeg-static")).default as string;
+            if (ffmpegStatic) ffmpegBin = ffmpegStatic;
+          } catch {}
           const transcoded = await new Promise<Buffer>((resolve, reject) => {
-            const proc = spawn("ffmpeg", [
+            const proc = spawn(ffmpegBin, [
               "-f", "webm",
               "-i", "pipe:0",
               "-vn",

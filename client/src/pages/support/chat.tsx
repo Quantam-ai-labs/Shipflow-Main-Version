@@ -1369,6 +1369,11 @@ export default function SupportChatPage() {
         if (recordDiscardRef.current) return;
         const blob = new Blob(recordingChunksRef.current, { type: supported.type });
         const audioFile = new File([blob], `voice-message.${supported.ext}`, { type: supported.type });
+        const validationError = validateMediaFile(audioFile);
+        if (validationError) {
+          toast({ title: "Cannot send voice note", description: validationError, variant: "destructive" });
+          return;
+        }
         mediaUploadMutation.mutate(audioFile);
       };
       mediaRecorder.start(250);
