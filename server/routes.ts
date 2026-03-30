@@ -7460,8 +7460,19 @@ export async function registerRoutes(
           console.error("[WA Template Edit] Meta call failed:", metaErr.message);
         }
       } else {
-        console.warn(`[WA Template Edit] No metaId for template "${tpl.name}" — updating locally only`);
+        const missingMetaId = !tpl.metaId;
+        const missingToken = !accessToken;
+        console.warn(
+          `[WA Template Edit] Skipping Meta API call for "${tpl.name}":`,
+          missingMetaId ? "no metaId stored (sync to populate)" : "no access token configured",
+          "— updating locally only"
+        );
       }
+
+      // Only set status to "pending" if we actually have a metaId (meaning the content
+      // was submitted to Meta for re-review). For local-only edits (no metaId), the
+      // previous status is preserved so the template remains usable in automations.
+      const newStatus = tpl.metaId ? "pending" : tpl.status;
 
       const updated = await storage.upsertWaMetaTemplate(merchantId, {
         name: tpl.name,
@@ -7472,7 +7483,7 @@ export async function registerRoutes(
         body: effectiveBody ?? null,
         footer: effectiveFooter ? String(effectiveFooter).slice(0, 60) : null,
         buttons: effectiveButtons,
-        status: tpl.metaId ? "pending" : tpl.status,
+        status: newStatus,
         metaId: tpl.metaId ?? undefined,
       });
 
