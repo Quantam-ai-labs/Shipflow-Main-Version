@@ -1255,10 +1255,40 @@ export default function SupportChatPage() {
     },
   });
 
+  const validateMediaFile = (file: globalThis.File): string | null => {
+    const mime = file.type;
+    if (mime.startsWith("image/")) {
+      if (mime === "image/heic" || mime === "image/heif") {
+        return "HEIC photos are not supported by WhatsApp. Please convert to JPEG or PNG first.";
+      }
+      const supported = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+      if (!supported.includes(mime)) {
+        return `Image format not supported by WhatsApp. Use JPEG, PNG, WebP, or GIF.`;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        return "Image too large for WhatsApp (max 5MB). Please compress it first.";
+      }
+    } else if (mime.startsWith("video/")) {
+      if (file.size > 16 * 1024 * 1024) {
+        return "Video too large for WhatsApp (max 16MB). Please trim or compress it.";
+      }
+    } else if (mime.startsWith("audio/")) {
+      if (file.size > 16 * 1024 * 1024) {
+        return "Audio too large for WhatsApp (max 16MB).";
+      }
+    }
+    return null;
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      mediaUploadMutation.mutate(file);
+      const validationError = validateMediaFile(file);
+      if (validationError) {
+        toast({ title: "Cannot send file", description: validationError, variant: "destructive" });
+      } else {
+        mediaUploadMutation.mutate(file);
+      }
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -1276,10 +1306,15 @@ export default function SupportChatPage() {
 
   const sendPastedImage = async () => {
     if (!pastedImage || !selectedConvId) return;
+    const ext = pastedImage.blob.type.split("/")[1] || "png";
+    const file = new File([pastedImage.blob], `paste-${Date.now()}.${ext}`, { type: pastedImage.blob.type });
+    const validationError = validateMediaFile(file);
+    if (validationError) {
+      toast({ title: "Cannot send file", description: validationError, variant: "destructive" });
+      return;
+    }
     setIsUploadingPaste(true);
     try {
-      const ext = pastedImage.blob.type.split("/")[1] || "png";
-      const file = new File([pastedImage.blob], `paste-${Date.now()}.${ext}`, { type: pastedImage.blob.type });
       await mediaUploadMutation.mutateAsync(file);
     } finally {
       setIsUploadingPaste(false);

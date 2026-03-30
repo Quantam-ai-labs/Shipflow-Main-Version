@@ -8334,7 +8334,17 @@ export async function registerRoutes(
 
   const multerUpload = (await import("multer")).default({ storage: (await import("multer")).default.memoryStorage(), limits: { fileSize: 16 * 1024 * 1024 } });
 
-  app.post("/api/support/conversations/:id/media", isAuthenticated, multerUpload.single("file"), async (req: any, res) => {
+  app.post("/api/support/conversations/:id/media", isAuthenticated, (req: any, res: any, next: any) => {
+    multerUpload.single("file")(req, res, (err: any) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(413).json({ error: "File too large. Max 5MB for images, 16MB for videos/audio." });
+        }
+        return res.status(400).json({ error: err.message || "File upload error" });
+      }
+      next();
+    });
+  }, async (req: any, res) => {
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
