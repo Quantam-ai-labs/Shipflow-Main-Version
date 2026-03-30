@@ -8438,16 +8438,20 @@ export async function registerRoutes(
         }
       }
 
-      const FormData = (await import("form-data")).default;
+      // Use native FormData + Blob (Node 18+ globals) — NOT the npm form-data package.
+      // The npm form-data package is incompatible with native fetch: native fetch cannot
+      // serialize it as multipart, causing Meta to receive no file field (#100 error).
+      const blob = new Blob([uploadBuffer], { type: uploadMime });
       const formData = new FormData();
       formData.append("messaging_product", "whatsapp");
       formData.append("type", uploadMime);
-      formData.append("file", uploadBuffer, { filename: uploadFilename, contentType: uploadMime });
+      formData.append("file", blob, uploadFilename);
 
       const uploadRes = await fetch(`https://graph.facebook.com/v22.0/${phoneNumberId}/media`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}`, ...formData.getHeaders() },
-        body: formData as any,
+        // Do NOT set Content-Type — native fetch sets multipart/form-data + boundary automatically
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: formData,
         signal: AbortSignal.timeout(30000),
       });
 
