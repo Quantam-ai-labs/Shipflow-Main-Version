@@ -7272,6 +7272,7 @@ export async function registerRoutes(
         footer: footer ? String(footer).slice(0, 60) : null,
         buttons: Array.isArray(buttons) ? buttons : [],
         status: metaStatus,
+        metaId: metaData.id ? String(metaData.id) : undefined,
       });
 
       console.log(`[WA Template] Template "${cleanName}" submitted to Meta, status: ${metaStatus}, id: ${metaData.id}`);
@@ -7350,6 +7351,7 @@ export async function registerRoutes(
           footer: footerComp?.text?.slice(0, 60) ?? null,
           buttons,
           status: (t.status || "approved").toLowerCase(),
+          metaId: t.id ? String(t.id) : undefined,
         });
         results.push(result);
       }
@@ -7394,6 +7396,89 @@ export async function registerRoutes(
       await storage.deleteWaMetaTemplate(merchantId, req.params.id);
       res.json({ success: true });
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.put("/api/wa-meta-templates/:id", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const tpl = await storage.getWaMetaTemplateById(merchantId, req.params.id);
+      if (!tpl) return res.status(404).json({ error: "Template not found" });
+
+      const merchant = await storage.getMerchant(merchantId);
+      const accessToken = merchant?.waAccessToken;
+
+      const { headerType, headerText, body, footer, buttons, category } = req.body;
+
+      const components: any[] = [];
+      const effectiveHeaderType = headerType ?? tpl.headerType;
+      if (effectiveHeaderType && effectiveHeaderType !== "none") {
+        components.push({
+          type: "HEADER",
+          format: effectiveHeaderType.toUpperCase(),
+          ...(effectiveHeaderType === "text" ? { text: (headerText ?? tpl.headerText) || "" } : {}),
+        });
+      }
+      const effectiveBody = body ?? tpl.body;
+      if (effectiveBody) components.push({ type: "BODY", text: effectiveBody });
+      const effectiveFooter = footer ?? tpl.footer;
+      if (effectiveFooter) components.push({ type: "FOOTER", text: effectiveFooter });
+      const effectiveButtons: any[] = buttons ?? (tpl.buttons as any[]) ?? [];
+      if (effectiveButtons.length) {
+        components.push({
+          type: "BUTTONS",
+          buttons: effectiveButtons.map((b: any) => {
+            if (b.type === "url") return { type: "URL", text: b.text, url: b.url };
+            if (b.type === "phone") return { type: "PHONE_NUMBER", text: b.text, phone_number: b.url };
+            return { type: "QUICK_REPLY", text: b.text };
+          }),
+        });
+      }
+
+      if (tpl.metaId && accessToken) {
+        try {
+          const metaRes = await fetch(`https://graph.facebook.com/v22.0/${tpl.metaId}`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              components,
+              ...(category ? { category: category.toUpperCase() } : {}),
+            }),
+            signal: AbortSignal.timeout(15000),
+          });
+          const metaData = await metaRes.json() as any;
+          if (!metaRes.ok) {
+            const errMsg = metaData?.error?.error_user_msg || metaData?.error?.message || "Meta rejected the edit";
+            console.error("[WA Template Edit] Meta error:", JSON.stringify(metaData));
+            return res.status(502).json({ error: errMsg });
+          }
+          console.log(`[WA Template Edit] Template "${tpl.name}" updated on Meta`);
+        } catch (metaErr: any) {
+          console.error("[WA Template Edit] Meta call failed:", metaErr.message);
+        }
+      } else {
+        console.warn(`[WA Template Edit] No metaId for template "${tpl.name}" — updating locally only`);
+      }
+
+      const updated = await storage.upsertWaMetaTemplate(merchantId, {
+        name: tpl.name,
+        language: tpl.language,
+        category: category ?? tpl.category,
+        headerType: effectiveHeaderType,
+        headerText: headerText !== undefined ? (headerText ? String(headerText).slice(0, 60) : null) : tpl.headerText,
+        body: effectiveBody ?? null,
+        footer: effectiveFooter ? String(effectiveFooter).slice(0, 60) : null,
+        buttons: effectiveButtons,
+        status: tpl.metaId ? "pending" : tpl.status,
+        metaId: tpl.metaId ?? undefined,
+      });
+
+      res.json({ template: updated });
+    } catch (error: any) {
+      console.error("[WA Template Edit] Error:", error.message);
       res.status(500).json({ error: error.message });
     }
   });

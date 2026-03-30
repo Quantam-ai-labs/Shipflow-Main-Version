@@ -1692,6 +1692,7 @@ export class DatabaseStorage implements IStorage {
           footer: data.footer,
           buttons: data.buttons,
           status: data.status,
+          ...(data.metaId !== undefined ? { metaId: data.metaId } : {}),
           updatedAt: now,
         },
       })

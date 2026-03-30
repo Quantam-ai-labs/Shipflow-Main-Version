@@ -32,6 +32,7 @@ interface WaMetaTemplate {
   footer: string | null;
   buttons: { type: string; text: string; url?: string }[];
   status: string;
+  metaId: string | null;
   createdAt: string;
 }
 
@@ -1072,6 +1073,216 @@ function AutomationCard({
   );
 }
 
+// ─── Template Edit Dialog ─────────────────────────────────────────────────────
+
+function TemplateEditDialog({
+  template,
+  onSave,
+  onClose,
+  isSaving,
+}: {
+  template: WaMetaTemplate;
+  onSave: (data: {
+    headerType: string; headerText: string; body: string; footer: string;
+    buttons: { type: string; text: string; url?: string }[];
+    category: string;
+  }) => void;
+  onClose: () => void;
+  isSaving: boolean;
+}) {
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  const [headerType, setHeaderType] = useState(template.headerType || "text");
+  const [headerText, setHeaderText] = useState(template.headerText || "");
+  const [body, setBody] = useState(template.body || "");
+  const [footer, setFooter] = useState(template.footer || "");
+  const [buttons, setButtons] = useState<{ type: string; text: string; url?: string }[]>(
+    (template.buttons as any[]) || []
+  );
+  const [category, setCategory] = useState(template.category || "utility");
+
+  const insertVar = (v: string) => {
+    const el = bodyRef.current;
+    if (!el) { setBody(p => p + v); return; }
+    const s = el.selectionStart ?? body.length;
+    const e = el.selectionEnd ?? body.length;
+    const next = body.slice(0, s) + v + body.slice(e);
+    setBody(next);
+    setTimeout(() => { el.focus(); el.setSelectionRange(s + v.length, s + v.length); }, 0);
+  };
+
+  const addButton = () => setButtons(b => [...b, { type: "quick_reply", text: "" }]);
+  const removeButton = (i: number) => setButtons(b => b.filter((_, idx) => idx !== i));
+
+  const handleSave = () => {
+    onSave({ headerType, headerText, body, footer, buttons, category });
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Template: {template.name}</DialogTitle>
+          <DialogDescription>
+            Changes will be submitted to Meta for re-approval. This may take 24-48 hours.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex gap-4 pt-2">
+          {/* Left — editor */}
+          <div className="flex-1 space-y-4 min-w-0">
+            {/* Re-approval warning */}
+            <div className="flex items-start gap-2 rounded-md border border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/30 px-3 py-2 text-sm text-yellow-800 dark:text-yellow-300">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Editing will resubmit this template for Meta approval. It may be temporarily unavailable while under review.</span>
+            </div>
+
+            {/* Category */}
+            <div className="space-y-1">
+              <Label className="text-xs">Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="h-8 text-sm" data-testid="select-edit-category">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="utility">Utility</SelectItem>
+                  <SelectItem value="marketing">Marketing</SelectItem>
+                  <SelectItem value="authentication">Authentication</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Header */}
+            <div className="space-y-1">
+              <Label className="text-xs">Header Type</Label>
+              <Select value={headerType} onValueChange={setHeaderType}>
+                <SelectTrigger className="h-8 text-sm" data-testid="select-edit-header-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="text">Text</SelectItem>
+                </SelectContent>
+              </Select>
+              {headerType === "text" && (
+                <Input
+                  value={headerText}
+                  onChange={e => setHeaderText(e.target.value)}
+                  maxLength={60}
+                  placeholder="Header text"
+                  className="h-8 text-sm mt-1"
+                  data-testid="input-edit-header-text"
+                />
+              )}
+            </div>
+
+            {/* Body */}
+            <div className="space-y-1">
+              <Label className="text-xs">Message Body</Label>
+              <div className="flex flex-wrap gap-1 mb-1">
+                {["{{name}}", "{{order_number}}", "{{order_total}}", "{{items}}", "{{tracking_number}}"].map(v => (
+                  <button
+                    key={v}
+                    type="button"
+                    className="text-xs px-2 py-0.5 rounded-full bg-muted hover:bg-muted/80 border font-mono"
+                    onClick={() => insertVar(v)}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <Textarea
+                ref={bodyRef}
+                value={body}
+                onChange={e => setBody(e.target.value)}
+                rows={5}
+                placeholder="Message body text"
+                className="text-sm resize-none"
+                data-testid="textarea-edit-body"
+              />
+              <p className="text-xs text-muted-foreground text-right">{body.length} chars</p>
+            </div>
+
+            {/* Footer */}
+            <div className="space-y-1">
+              <Label className="text-xs">Footer (optional)</Label>
+              <Input
+                value={footer}
+                onChange={e => setFooter(e.target.value)}
+                maxLength={60}
+                placeholder="Footer text"
+                className="h-8 text-sm"
+                data-testid="input-edit-footer"
+              />
+            </div>
+
+            {/* Buttons */}
+            <div className="space-y-2">
+              <Label className="text-xs">Buttons</Label>
+              {buttons.map((btn, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <Select value={btn.type} onValueChange={v => setButtons(b => b.map((x, idx) => idx === i ? { ...x, type: v } : x))}>
+                    <SelectTrigger className="h-8 text-xs w-32 shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="quick_reply">Quick Reply</SelectItem>
+                      <SelectItem value="url">URL</SelectItem>
+                      <SelectItem value="phone">Phone</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={btn.text}
+                    onChange={e => setButtons(b => b.map((x, idx) => idx === i ? { ...x, text: e.target.value } : x))}
+                    placeholder="Button text"
+                    className="h-8 text-xs flex-1"
+                  />
+                  {(btn.type === "url" || btn.type === "phone") && (
+                    <Input
+                      value={btn.url || ""}
+                      onChange={e => setButtons(b => b.map((x, idx) => idx === i ? { ...x, url: e.target.value } : x))}
+                      placeholder={btn.type === "url" ? "https://..." : "+92..."}
+                      className="h-8 text-xs flex-1"
+                    />
+                  )}
+                  <button type="button" onClick={() => removeButton(i)} className="text-muted-foreground hover:text-destructive p-1">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+              {buttons.length < 3 && (
+                <button type="button" onClick={addButton} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                  <Plus className="w-3 h-3" /> Add button
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Right — live preview */}
+          <div className="w-64 shrink-0">
+            <p className="text-xs text-muted-foreground mb-2 font-medium">Preview</p>
+            <WaPreview
+              headerText={headerType === "text" ? headerText : ""}
+              body={body}
+              footer={footer}
+              buttons={buttons}
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-4 border-t mt-4">
+          <Button variant="outline" onClick={onClose} disabled={isSaving} data-testid="button-edit-cancel">
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving || !body.trim()} data-testid="button-edit-save">
+            {isSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save & Resubmit"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SupportTemplatesPage() {
@@ -1081,6 +1292,8 @@ export default function SupportTemplatesPage() {
   const [editorPreset, setEditorPreset] = useState<typeof PRESETS[0] | null>(null);
   const [autoDialogOpen, setAutoDialogOpen] = useState(false);
   const [editingAutomation, setEditingAutomation] = useState<WaAutomation | null>(null);
+  const [expandedTplId, setExpandedTplId] = useState<string | null>(null);
+  const [editingTpl, setEditingTpl] = useState<WaMetaTemplate | null>(null);
 
   // WA Meta Templates
   const { data: metaTemplates = [], isLoading: tplLoading } = useQuery<WaMetaTemplate[]>({
@@ -1122,6 +1335,19 @@ export default function SupportTemplatesPage() {
     onError: (err: any) => {
       toast({ title: err?.message || "Failed to sync templates from Meta", variant: "destructive" });
     },
+  });
+
+  const editTplMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const res = await apiRequest("PUT", `/api/wa-meta-templates/${id}`, data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wa-meta-templates"] });
+      setEditingTpl(null);
+      toast({ title: "Template updated", description: "Submitted for re-approval. This may take 24-48 hours." });
+    },
+    onError: (err: any) => toast({ title: "Update failed", description: err?.message || "Could not update template", variant: "destructive" }),
   });
 
   const [hasSynced, setHasSynced] = useState(false);
@@ -1348,28 +1574,60 @@ export default function SupportTemplatesPage() {
                 No templates yet. Use a preset above or click "New Template" to create one.
               </p>
             ) : (
-              <div className="divide-y border rounded-lg overflow-hidden">
-                {metaTemplates.map(tpl => (
-                  <div key={tpl.id} className="flex items-center gap-3 px-4 py-3 bg-background hover:bg-muted/20 transition-colors" data-testid={`row-template-${tpl.id}`}>
-                    <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm truncate">{tpl.name}</p>
-                      <p className="text-xs text-muted-foreground">{tpl.language} | {tpl.category.toUpperCase()}</p>
+              <div className="border rounded-lg overflow-hidden">
+                {metaTemplates.map(tpl => {
+                  const isExpanded = expandedTplId === tpl.id;
+                  return (
+                    <div key={tpl.id} className="border-b last:border-b-0" data-testid={`row-template-${tpl.id}`}>
+                      <div
+                        className="flex items-center gap-3 px-4 py-3 bg-background hover:bg-muted/20 transition-colors cursor-pointer"
+                        onClick={() => setExpandedTplId(isExpanded ? null : tpl.id)}
+                      >
+                        <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm truncate">{tpl.name}</p>
+                          <p className="text-xs text-muted-foreground">{tpl.language} | {tpl.category.toUpperCase()}</p>
+                        </div>
+                        <Badge variant={tpl.status === "approved" ? "secondary" : tpl.status === "rejected" ? "destructive" : "outline"} className="text-xs shrink-0">
+                          {tpl.status.toUpperCase()}
+                        </Badge>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setEditingTpl(tpl); }}
+                          className="text-muted-foreground hover:text-primary transition-colors p-1 shrink-0"
+                          data-testid={`button-edit-template-${tpl.id}`}
+                          title="Edit template"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); deleteTplMutation.mutate(tpl.id); }}
+                          disabled={deleteTplMutation.isPending}
+                          className="text-muted-foreground hover:text-destructive transition-colors p-1 shrink-0"
+                          data-testid={`button-delete-template-${tpl.id}`}
+                          title="Delete template"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        {isExpanded
+                          ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
+                          : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                        }
+                      </div>
+                      {isExpanded && (
+                        <div className="px-4 pb-4 pt-2 bg-muted/10">
+                          <WaPreview
+                            headerText={tpl.headerText || ""}
+                            body={tpl.body || ""}
+                            footer={tpl.footer || ""}
+                            buttons={(tpl.buttons as any[]) || []}
+                          />
+                        </div>
+                      )}
                     </div>
-                    <Badge variant={tpl.status === "approved" ? "secondary" : tpl.status === "rejected" ? "destructive" : "outline"} className="text-xs shrink-0">
-                      {tpl.status.toUpperCase()}
-                    </Badge>
-                    <button
-                      type="button"
-                      onClick={() => deleteTplMutation.mutate(tpl.id)}
-                      disabled={deleteTplMutation.isPending}
-                      className="text-muted-foreground hover:text-destructive transition-colors p-1 shrink-0"
-                      data-testid={`button-delete-template-${tpl.id}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1597,6 +1855,16 @@ export default function SupportTemplatesPage() {
             </TooltipProvider>
           )}
         </div>
+      )}
+
+      {/* Template Edit Dialog */}
+      {editingTpl && (
+        <TemplateEditDialog
+          template={editingTpl}
+          onSave={(data) => editTplMutation.mutate({ id: editingTpl.id, data })}
+          onClose={() => setEditingTpl(null)}
+          isSaving={editTplMutation.isPending}
+        />
       )}
     </div>
   );

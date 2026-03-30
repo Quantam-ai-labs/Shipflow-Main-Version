@@ -423,6 +423,7 @@ export const waMetaTemplates = pgTable("wa_meta_templates", {
   footer: varchar("footer", { length: 60 }),
   buttons: jsonb("buttons").default([]),
   status: varchar("status", { length: 20 }).default("approved").notNull(),
+  metaId: varchar("meta_id", { length: 64 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
