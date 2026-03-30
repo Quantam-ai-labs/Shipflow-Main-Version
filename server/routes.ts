@@ -7494,10 +7494,11 @@ export async function registerRoutes(
         );
       }
 
-      // Only set status to "pending" if Meta actually accepted the re-submission.
-      // For local-only edits (no metaId, no token, or network failure), the previous
-      // status is preserved so the template remains usable in automations.
-      const newStatus = metaSubmitSucceeded ? "pending" : tpl.status;
+      // Always set status to "pending" after an edit — content has changed and needs
+      // re-review, regardless of whether the Meta API call succeeded. If Meta was not
+      // reachable (no metaId / no token / network failure), the template is locally
+      // marked pending so the merchant knows to re-sync and push the change to Meta.
+      const newStatus = "pending";
 
       const updated = await storage.upsertWaMetaTemplate(merchantId, {
         name: tpl.name,
