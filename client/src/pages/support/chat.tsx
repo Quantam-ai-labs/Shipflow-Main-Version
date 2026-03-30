@@ -1300,9 +1300,16 @@ export default function SupportChatPage() {
     e.preventDefault();
     const blob = imageItem.getAsFile();
     if (!blob) return;
+    const testFile = new File([blob], `paste.${blob.type.split("/")[1] || "png"}`, { type: blob.type });
+    const validationError = validateMediaFile(testFile);
+    if (validationError) {
+      toast({ title: "Cannot paste image", description: validationError, variant: "destructive" });
+      return;
+    }
     const previewUrl = URL.createObjectURL(blob);
     setPastedImage({ blob, previewUrl });
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast]);
 
   const sendPastedImage = async () => {
     if (!pastedImage || !selectedConvId) return;

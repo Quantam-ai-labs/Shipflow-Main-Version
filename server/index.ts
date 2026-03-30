@@ -253,24 +253,21 @@ function scheduleStartupRecovery() {
     () => {
       log(`serving on port ${port}`);
       // Verify ffmpeg is available for audio transcoding (webm → ogg for WhatsApp)
+      // Uses ffmpeg-static (npm-bundled binary) as primary — always present in production.
+      // Falls back to system ffmpeg if ffmpeg-static is unavailable.
       import("child_process").then(async ({ spawnSync }) => {
-        // Try system ffmpeg first, then ffmpeg-static bundled binary
         let ffmpegBin = "ffmpeg";
-        let check = spawnSync(ffmpegBin, ["-version"], { encoding: "utf8" });
-        if (check.error || check.status !== 0) {
-          try {
-            const ffmpegStatic = (await import("ffmpeg-static")).default as string;
-            if (ffmpegStatic) {
-              ffmpegBin = ffmpegStatic;
-              check = spawnSync(ffmpegBin, ["-version"], { encoding: "utf8" });
-            }
-          } catch {}
-        }
+        let label = "system";
+        try {
+          const ffmpegStatic = (await import("ffmpeg-static")).default as string;
+          if (ffmpegStatic) { ffmpegBin = ffmpegStatic; label = "ffmpeg-static"; }
+        } catch {}
+        const check = spawnSync(ffmpegBin, ["-version"], { encoding: "utf8" });
         if (check.error || check.status !== 0) {
           console.error("[ffmpeg] WARNING: ffmpeg not found or failed — WhatsApp audio sends (webm→ogg transcode) will fail.", check.error?.message ?? "");
         } else {
           const version = (check.stdout as string).split("\n")[0] ?? "unknown";
-          console.log(`[ffmpeg] Available (${ffmpegBin === "ffmpeg" ? "system" : "bundled"}): ${version}`);
+          console.log(`[ffmpeg] Available (${label}): ${version}`);
         }
       });
       seedSuperAdmin();
