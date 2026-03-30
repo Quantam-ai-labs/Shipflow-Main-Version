@@ -7462,6 +7462,8 @@ export async function registerRoutes(
         components.push({ type: "BUTTONS", buttons: metaButtons });
       }
 
+      // Track whether Meta actually accepted the edit — only set "pending" if it did
+      let metaSubmitSucceeded = false;
       if (tpl.metaId && accessToken) {
         try {
           const metaRes = await fetch(`https://graph.facebook.com/v22.0/${tpl.metaId}`, {
@@ -7479,24 +7481,23 @@ export async function registerRoutes(
             console.error("[WA Template Edit] Meta error:", JSON.stringify(metaData));
             return res.status(502).json({ error: errMsg });
           }
+          metaSubmitSucceeded = true;
           console.log(`[WA Template Edit] Template "${tpl.name}" updated on Meta`);
         } catch (metaErr: any) {
           console.error("[WA Template Edit] Meta call failed:", metaErr.message);
         }
       } else {
-        const missingMetaId = !tpl.metaId;
-        const missingToken = !accessToken;
         console.warn(
           `[WA Template Edit] Skipping Meta API call for "${tpl.name}":`,
-          missingMetaId ? "no metaId stored (sync to populate)" : "no access token configured",
+          !tpl.metaId ? "no metaId stored (re-sync to populate)" : "no access token configured",
           "— updating locally only"
         );
       }
 
-      // Only set status to "pending" if we actually have a metaId (meaning the content
-      // was submitted to Meta for re-review). For local-only edits (no metaId), the
-      // previous status is preserved so the template remains usable in automations.
-      const newStatus = tpl.metaId ? "pending" : tpl.status;
+      // Only set status to "pending" if Meta actually accepted the re-submission.
+      // For local-only edits (no metaId, no token, or network failure), the previous
+      // status is preserved so the template remains usable in automations.
+      const newStatus = metaSubmitSucceeded ? "pending" : tpl.status;
 
       const updated = await storage.upsertWaMetaTemplate(merchantId, {
         name: tpl.name,
