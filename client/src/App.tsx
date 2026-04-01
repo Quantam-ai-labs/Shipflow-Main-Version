@@ -544,9 +544,11 @@ function MainApp() {
   // Invite acceptance page is accessible to both authenticated and unauthenticated users
   if (location.startsWith("/invite/")) {
     return (
-      <Switch>
-        <Route path="/invite/:token" component={InviteAccept} />
-      </Switch>
+      <Suspense fallback={<PageLoader />}>
+        <Switch>
+          <Route path="/invite/:token" component={InviteAccept} />
+        </Switch>
+      </Suspense>
     );
   }
 
