@@ -306,6 +306,7 @@ export const orders = pgTable("orders", {
   waLastTemplateUsed: varchar("wa_last_template_used", { length: 100 }),
   waNotOnWhatsApp: boolean("wa_not_on_whatsapp").default(false),
   waAutomationId: varchar("wa_automation_id"),
+  manuallyEditedFields: jsonb("manually_edited_fields").$type<string[]>().default([]),
 }, (table) => [
   index("idx_orders_merchant").on(table.merchantId),
   index("idx_orders_shopify_id").on(table.shopifyOrderId),

@@ -280,8 +280,10 @@ export class WebhookHandler {
 
       if (existingOrder) {
         const safeUpdate: any = {};
+        const manuallyEditedFields: string[] = Array.isArray(existingOrder.manuallyEditedFields) ? (existingOrder.manuallyEditedFields as string[]) : [];
         for (const [key, value] of Object.entries(orderData)) {
           if (key === 'merchantId' || key === 'id' || key === 'shopifyOrderId' || key === 'orderNumber') continue;
+          if (manuallyEditedFields.includes(key)) continue;
           if (key === 'customerName' && value === 'Unknown' && existingOrder.customerName !== 'Unknown') continue;
           if (typeof value === 'string' && value === '' && (existingOrder as any)[key]) continue;
           if (value === null && (existingOrder as any)[key]) continue;

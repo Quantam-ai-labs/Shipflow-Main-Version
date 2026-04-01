@@ -1415,14 +1415,6 @@ export async function registerRoutes(
           return res.status(400).json({ message: "No fields to update" });
         }
 
-        const updated = await storage.updateOrderWorkflow(
-          merchantId,
-          orderId,
-          updateData,
-        );
-        if (!updated)
-          return res.status(404).json({ message: "Order not found" });
-
         const actorUserId = getSessionUserId(req) || null;
         const actorName = await getSessionUserName(req);
 
@@ -1449,6 +1441,16 @@ export async function registerRoutes(
             });
           }
         }
+        const existingManuallyEditedFields: string[] = Array.isArray(order.manuallyEditedFields) ? order.manuallyEditedFields : [];
+        const newManuallyEditedFields = Array.from(new Set([...existingManuallyEditedFields, ...changedFields.map(c => c.field)]));
+        const updated = await storage.updateOrderWorkflow(
+          merchantId,
+          orderId,
+          { ...updateData, manuallyEditedFields: newManuallyEditedFields },
+        );
+        if (!updated)
+          return res.status(404).json({ message: "Order not found" });
+
         if (changedFields.length > 0) {
           await storage.createOrderChangeLog({
             orderId,
