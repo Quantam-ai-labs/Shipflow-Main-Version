@@ -17897,13 +17897,22 @@ export async function registerRoutes(
           }
           const searchData = await searchResponse.json();
           const normalizePhone = (p: string) => p.replace(/\D/g, "");
+          const phoneSuffixMatch = (a: string, b: string) => {
+            const na = normalizePhone(a);
+            const nb = normalizePhone(b);
+            if (na === nb) return true;
+            const minLen = Math.min(na.length, nb.length);
+            const suffixLen = minLen >= 10 ? 10 : 9;
+            return minLen >= suffixLen && na.slice(-suffixLen) === nb.slice(-suffixLen);
+          };
           const normalizeEmail = (e: string) => e.trim().toLowerCase();
-          const existingCustomer = (searchData.customers || []).find((c: any) => {
-            if (searchField === "phone") {
-              return c.phone && normalizePhone(c.phone) === normalizePhone(searchValue as string);
-            }
-            return c.email && normalizeEmail(c.email) === normalizeEmail(searchValue as string);
-          });
+          const customers: any[] = searchData.customers || [];
+          let existingCustomer: any;
+          if (searchField === "phone") {
+            existingCustomer = customers[0] || customers.find((c: any) => c.phone && phoneSuffixMatch(c.phone, searchValue as string));
+          } else {
+            existingCustomer = customers.find((c: any) => c.email && normalizeEmail(c.email) === normalizeEmail(searchValue as string));
+          }
           if (!existingCustomer) {
             const errMsg = JSON.stringify(parsed.errors);
             return res.status(400).json({ error: `Shopify error: ${errMsg}` });
