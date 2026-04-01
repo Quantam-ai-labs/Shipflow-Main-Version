@@ -19,11 +19,9 @@ function getRetryAttemptForIndex(automation: any, index: number): RetryAttempt |
 }
 
 function getMaxAttempts(automation: any, merchant: any): number {
-  const merchantMax: number = merchant.waMaxAttempts ?? 3;
-  if (merchantMax <= 1) return 1;
   const attempts: RetryAttempt[] | null = automation?.retryAttempts;
   if (attempts && attempts.length > 0) return 1 + attempts.length;
-  return merchantMax;
+  return merchant.waMaxAttempts ?? 3;
 }
 
 function getNextAttemptDelay(automation: any, merchant: any, currentAttempt: number): number | null {
@@ -616,8 +614,13 @@ async function checkOrphanedConfirmations() {
 
         if (currentAttemptCount >= maxAttempts) continue;
 
+        const firstRetryDelayHours: number | null = automation?.retryAttempts?.[0]?.delayHours ?? null;
+        const delayMs = firstRetryDelayHours != null
+          ? firstRetryDelayHours * 60 * 60 * 1000
+          : (merchant.waAttempt2DelayHours || 4) * 60 * 60 * 1000;
+
         await db.update(orders).set({
-          waNextAttemptAt: new Date(now.getTime() - 1),
+          waNextAttemptAt: new Date(now.getTime() + delayMs),
           updatedAt: now,
         }).where(eq(orders.id, order.id));
 
