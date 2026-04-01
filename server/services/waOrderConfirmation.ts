@@ -1,5 +1,6 @@
 import { db } from "../db";
 import { orders } from "@shared/schema";
+import type { Order } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { storage } from "../storage";
 import { processConfirmationResponse, createNotification, logConfirmationEvent } from "./confirmationEngine";
@@ -64,6 +65,7 @@ async function handleConflictClarificationReply(
   if (conflictState === "awaiting_clarification") {
     if (action === "confirm") {
       // Customer confirmed — finalize order as READY_TO_SHIP
+      // Conversation label stays 'conflicting' until agent manually resolves
       await db.update(orders).set({
         conflictClarificationState: null,
         conflictDetected: true,
@@ -80,12 +82,6 @@ async function handleConflictClarificationReply(
         reason: "Customer confirmed after conflict clarification",
       }).catch(() => {});
 
-      // Update conversation label — remove conflicting label
-      const conv = await storage.getConversationByPhone(merchantId, normalizedPhone);
-      if (conv) {
-        await storage.updateConversationLabel(merchantId, conv.id, null).catch(() => {});
-      }
-
       await sendWhatsAppMessage(normalizedPhone,
         `✅ Thank you! Your order #${orderNumber} has been confirmed and will be processed shortly.`,
         replyPhoneId, replyAccessToken);
@@ -94,6 +90,7 @@ async function handleConflictClarificationReply(
 
     } else if (action === "cancel") {
       // Customer wants to cancel — ask for reason
+      // Conversation label stays 'conflicting' until agent manually resolves
       await db.update(orders).set({
         conflictClarificationState: "awaiting_cancel_reason",
         updatedAt: now,
@@ -106,7 +103,7 @@ async function handleConflictClarificationReply(
       console.log(`${LOG} Conflict → awaiting cancel reason for order #${orderNumber}`);
 
     } else {
-      // Unclear response — mark as permanently conflicting
+      // Unclear response — mark as permanently conflicting, requires manual resolution
       await db.update(orders).set({
         conflictClarificationState: "conflicting",
         conflictDetected: true,
@@ -131,7 +128,8 @@ async function handleConflictClarificationReply(
 
   } else if (conflictState === "awaiting_cancel_reason") {
     if (action === "confirm") {
-      // Customer changed their mind again — confirm the order
+      // Customer changed their mind — confirm the order instead
+      // Conversation label stays 'conflicting' until agent manually resolves
       await db.update(orders).set({
         conflictClarificationState: null,
         conflictDetected: true,
@@ -148,11 +146,6 @@ async function handleConflictClarificationReply(
         reason: "Customer confirmed after conflict clarification (reversed cancel intent)",
       }).catch(() => {});
 
-      const conv = await storage.getConversationByPhone(merchantId, normalizedPhone);
-      if (conv) {
-        await storage.updateConversationLabel(merchantId, conv.id, null).catch(() => {});
-      }
-
       await sendWhatsAppMessage(normalizedPhone,
         `✅ Got it! Your order #${orderNumber} has been confirmed and will be processed shortly.`,
         replyPhoneId, replyAccessToken);
@@ -161,6 +154,7 @@ async function handleConflictClarificationReply(
 
     } else {
       // Any other reply treated as the cancel reason
+      // Conversation label stays 'conflicting' until agent manually resolves
       const cancelReason = messageBody.trim() || "Customer requested cancellation";
 
       await db.update(orders).set({
@@ -179,11 +173,6 @@ async function handleConflictClarificationReply(
         actorType: "system",
         reason: `Customer cancelled after conflict. Reason: ${cancelReason}`,
       }).catch(() => {});
-
-      const convCancel = await storage.getConversationByPhone(merchantId, normalizedPhone);
-      if (convCancel) {
-        await storage.updateConversationLabel(merchantId, convCancel.id, null).catch(() => {});
-      }
 
       await sendWhatsAppMessage(normalizedPhone,
         `We've noted your cancellation for order #${orderNumber}. Thank you for letting us know — we've recorded your reason. If you change your mind or need assistance, please feel free to reach out.`,
@@ -219,8 +208,8 @@ export async function processWhatsAppOrderResponse(
     const lowerMessage = messageBody.toLowerCase().trim();
     console.log(`${LOG} Analyzing message for order #${orderNumber}: "${lowerMessage.slice(0, 80)}"`);
 
-    const orderForStatus = await storage.getOrderById(merchantId, orderId);
-    const conflictState = (orderForStatus as any)?.conflictClarificationState as string | null | undefined;
+    const orderForStatus: Order | undefined = await storage.getOrderById(merchantId, orderId);
+    const conflictState = orderForStatus?.conflictClarificationState;
 
     // ── 1. In-progress conflict clarification ─────────────────────────────────
     if (conflictState === "awaiting_clarification" || conflictState === "awaiting_cancel_reason") {
@@ -260,7 +249,7 @@ export async function processWhatsAppOrderResponse(
           updatedAt: new Date(),
         }).where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
 
-        // Label conversation as conflicting
+        // Label conversation as conflicting — label stays until agent manually clears
         const conv = await storage.getConversationByPhone(merchantId, normalizedPhone);
         if (conv) {
           await storage.updateConversationLabel(merchantId, conv.id, "conflicting").catch(() => {});
@@ -296,7 +285,7 @@ export async function processWhatsAppOrderResponse(
         return;
       }
 
-      // Not a conflict — just an additional message after action taken; route to AI or fallback
+      // Not a conflict — route to AI or send fallback
       const aiMerchant = await storage.getMerchant(merchantId);
       if (aiMerchant?.aiAutoReplyEnabled) {
         const conv = await storage.getConversationByPhone(merchantId, normalizedPhone);
