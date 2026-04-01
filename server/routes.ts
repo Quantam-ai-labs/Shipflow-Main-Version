@@ -7907,7 +7907,7 @@ export async function registerRoutes(
 
         const displayText = (() => {
           if (metaTemplate?.body && templateParams && templateParams.length > 0) {
-            return metaTemplate.body.replace(/\{\{(\d+)\}\}/g, (_, n) => templateParams![parseInt(n) - 1] ?? `{{${n}}}`);
+            return metaTemplate.body.replace(/\{\{(\d+)\}\}/g, (_, n) => templateParams[parseInt(n) - 1] ?? `{{${n}}}`);
           }
           if (metaTemplate?.body) return metaTemplate.body;
           return `[Template: ${templateName}]`;
