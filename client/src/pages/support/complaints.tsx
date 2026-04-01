@@ -539,9 +539,12 @@ function NewComplaintDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [source, setSource] = useState("other");
-  const [reason, setReason] = useState("");
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderLookupDone, setOrderLookupDone] = useState(false);
+  const [complaintCategory, setComplaintCategory] = useState("");
+  const [logisticsNote, setLogisticsNote] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState("");
+  const [lookedUpLineItems, setLookedUpLineItems] = useState<Array<{ title?: string; name?: string }>>([]);
 
   const orderLookup = useMutation({
     mutationFn: async (num: string) => {
@@ -555,8 +558,10 @@ function NewComplaintDialog({ open, onOpenChange }: { open: boolean; onOpenChang
         setOrderId(o.id);
         if (o.customerName && !customerName) setCustomerName(o.customerName);
         if (o.customerPhone && !customerPhone) setCustomerPhone(o.customerPhone);
+        setLookedUpLineItems(Array.isArray(o.lineItems) ? o.lineItems : []);
         toast({ title: "Order found", description: `${o.orderNumber} — ${o.customerName || ""}` });
       } else {
+        setLookedUpLineItems([]);
         toast({ title: "No order found", variant: "destructive" });
       }
     },
@@ -570,18 +575,24 @@ function NewComplaintDialog({ open, onOpenChange }: { open: boolean; onOpenChang
         customerName: customerName || undefined,
         customerPhone: customerPhone || undefined,
         source,
-        reason: reason || undefined,
+        complaintCategory: complaintCategory || undefined,
+        logisticsNote: complaintCategory === "logistics" ? logisticsNote || undefined : undefined,
+        selectedProduct: complaintCategory === "product" ? selectedProduct || undefined : undefined,
       }),
     onSuccess: async (res: any) => {
       const data = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/support/complaints"] });
-      toast({ title: "Complaint created", description: `Ticket: ${data.ticketNumber}` });
+      const waMsg = data.waSent ? " WhatsApp notification sent to customer." : "";
+      toast({ title: "Complaint created", description: `Ticket: ${data.ticketNumber}.${waMsg}` });
       onOpenChange(false);
     },
     onError: () => {
       toast({ title: "Failed to create complaint", variant: "destructive" });
     },
   });
+
+  const canSubmit = (!customerName && !customerPhone) === false &&
+    (complaintCategory !== "product" || !!selectedProduct);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -595,7 +606,7 @@ function NewComplaintDialog({ open, onOpenChange }: { open: boolean; onOpenChang
               <Label className="text-xs">Order Number</Label>
               <Input
                 value={orderNumber}
-                onChange={e => { setOrderNumber(e.target.value); setOrderLookupDone(false); setOrderId(null); }}
+                onChange={e => { setOrderNumber(e.target.value); setOrderLookupDone(false); setOrderId(null); setLookedUpLineItems([]); }}
                 placeholder="#1001"
                 data-testid="input-order-number"
               />
@@ -637,22 +648,66 @@ function NewComplaintDialog({ open, onOpenChange }: { open: boolean; onOpenChang
               </SelectContent>
             </Select>
           </div>
+
           <div className="space-y-1">
-            <Label className="text-xs">Reason</Label>
-            <Textarea
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-              placeholder="Describe the complaint..."
-              rows={3}
-              data-testid="textarea-reason"
-            />
+            <Label className="text-xs">Complaint Category</Label>
+            <Select value={complaintCategory} onValueChange={v => { setComplaintCategory(v); setSelectedProduct(""); setLogisticsNote(""); }} data-testid="select-complaint-category">
+              <SelectTrigger data-testid="trigger-complaint-category">
+                <SelectValue placeholder="Select category..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="order">Issue with my order</SelectItem>
+                <SelectItem value="logistics">Logistics / delivery issue</SelectItem>
+                <SelectItem value="product">Issue with a product</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+
+          {complaintCategory === "order" && orderNumber && (
+            <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              Complaint will be logged for order <span className="font-mono font-medium text-foreground">#{orderNumber}</span>.
+            </div>
+          )}
+
+          {complaintCategory === "logistics" && (
+            <div className="space-y-1">
+              <Label className="text-xs">Describe the issue</Label>
+              <Textarea
+                value={logisticsNote}
+                onChange={e => setLogisticsNote(e.target.value)}
+                placeholder="e.g. Package delayed, wrong address, missing item..."
+                rows={2}
+                data-testid="textarea-logistics-note"
+              />
+            </div>
+          )}
+
+          {complaintCategory === "product" && (
+            <div className="space-y-1">
+              <Label className="text-xs">Select product</Label>
+              {lookedUpLineItems.length > 0 ? (
+                <Select value={selectedProduct} onValueChange={setSelectedProduct} data-testid="select-product">
+                  <SelectTrigger data-testid="trigger-product">
+                    <SelectValue placeholder="Choose a product..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lookedUpLineItems.map((li, i) => {
+                      const title = li.title || li.name || `Product ${i + 1}`;
+                      return <SelectItem key={i} value={title}>{title}</SelectItem>;
+                    })}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-xs text-amber-500">Look up an order first to select a product.</p>
+              )}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
             onClick={() => createMutation.mutate()}
-            disabled={createMutation.isPending || (!customerName && !customerPhone)}
+            disabled={createMutation.isPending || !canSubmit}
             data-testid="button-create-complaint"
           >
             {createMutation.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}

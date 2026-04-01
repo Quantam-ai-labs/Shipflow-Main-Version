@@ -3499,8 +3499,19 @@ function FileComplaintFromChat({
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [reason, setReason] = useState("");
+  const [complaintCategory, setComplaintCategory] = useState<string>("");
+  const [logisticsNote, setLogisticsNote] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState("");
   const [ticketCreated, setTicketCreated] = useState<string | null>(null);
+  const [waSent, setWaSent] = useState(false);
+
+  const { data: orderData } = useQuery<any>({
+    queryKey: ["/api/orders", conversation.orderId],
+    queryFn: () => fetch(`/api/orders/${conversation.orderId}`).then(r => r.json()),
+    enabled: complaintCategory === "product" && !!conversation.orderId,
+  });
+
+  const lineItems: Array<{ title?: string; name?: string }> = orderData?.lineItems ?? orderData?.order?.lineItems ?? [];
 
   const createMutation = useMutation({
     mutationFn: async () =>
@@ -3511,11 +3522,14 @@ function FileComplaintFromChat({
         customerPhone: conversation.contactPhone || undefined,
         conversationId: conversation.id,
         source: "whatsapp_chat",
-        reason: reason || undefined,
+        complaintCategory: complaintCategory || undefined,
+        logisticsNote: complaintCategory === "logistics" ? logisticsNote || undefined : undefined,
+        selectedProduct: complaintCategory === "product" ? selectedProduct || undefined : undefined,
       }),
     onSuccess: async (res: Response) => {
       const data = await res.json();
       setTicketCreated(data.ticketNumber);
+      setWaSent(!!data.waSent);
       queryClient.invalidateQueries({ queryKey: ["/api/support/complaints"] });
       toast({ title: "Complaint filed", description: `Ticket: ${data.ticketNumber}` });
     },
@@ -3523,6 +3537,10 @@ function FileComplaintFromChat({
       toast({ title: "Failed to create complaint", variant: "destructive" });
     },
   });
+
+  const canSubmit = !!complaintCategory && (
+    complaintCategory !== "product" || !!selectedProduct
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -3542,6 +3560,11 @@ function FileComplaintFromChat({
             <p className="text-xs text-muted-foreground">
               Customer: {conversation.contactName || conversation.contactPhone}
             </p>
+            {waSent && (
+              <p className="text-xs text-green-400 flex items-center justify-center gap-1" data-testid="text-wa-sent">
+                <Check className="w-3 h-3" /> WhatsApp notification sent to customer
+              </p>
+            )}
             <Button size="sm" onClick={() => onOpenChange(false)} data-testid="button-close-complaint">
               Done
             </Button>
@@ -3558,24 +3581,72 @@ function FileComplaintFromChat({
                 </p>
               )}
             </div>
-            <div>
-              <Label htmlFor="complaint-reason" className="text-sm font-medium">Reason (optional)</Label>
-              <Textarea
-                id="complaint-reason"
-                placeholder="Describe the issue..."
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="mt-1 h-24 resize-none"
-                data-testid="textarea-complaint-reason"
-              />
+
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Complaint Category</Label>
+              <Select value={complaintCategory} onValueChange={v => { setComplaintCategory(v); setSelectedProduct(""); setLogisticsNote(""); }} data-testid="select-complaint-category">
+                <SelectTrigger data-testid="trigger-complaint-category">
+                  <SelectValue placeholder="Select category..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="order">Issue with my order</SelectItem>
+                  <SelectItem value="logistics">Logistics / delivery issue</SelectItem>
+                  <SelectItem value="product">Issue with a product</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {complaintCategory === "order" && (
+              <div className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                {conversation.orderNumber
+                  ? <>Complaint will be logged for order <span className="font-mono font-medium text-foreground">#{conversation.orderNumber}</span>.</>
+                  : "No order linked to this conversation."}
+              </div>
+            )}
+
+            {complaintCategory === "logistics" && (
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Describe the issue</Label>
+                <Textarea
+                  placeholder="e.g. Package delayed, wrong address, missing item..."
+                  value={logisticsNote}
+                  onChange={e => setLogisticsNote(e.target.value)}
+                  className="h-20 resize-none"
+                  data-testid="textarea-logistics-note"
+                />
+              </div>
+            )}
+
+            {complaintCategory === "product" && (
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Select product</Label>
+                {lineItems.length > 0 ? (
+                  <Select value={selectedProduct} onValueChange={setSelectedProduct} data-testid="select-product">
+                    <SelectTrigger data-testid="trigger-product">
+                      <SelectValue placeholder="Choose a product..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {lineItems.map((li, i) => {
+                        const title = li.title || li.name || `Product ${i + 1}`;
+                        return <SelectItem key={i} value={title}>{title}</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                ) : conversation.orderId ? (
+                  <p className="text-xs text-muted-foreground">Loading products...</p>
+                ) : (
+                  <p className="text-xs text-amber-500">No order linked — cannot select product.</p>
+                )}
+              </div>
+            )}
+
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel-complaint">
                 Cancel
               </Button>
               <Button
                 onClick={() => createMutation.mutate()}
-                disabled={createMutation.isPending}
+                disabled={createMutation.isPending || !canSubmit}
                 data-testid="button-submit-complaint"
               >
                 {createMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}

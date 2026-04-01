@@ -17671,7 +17671,10 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { orderId, orderNumber, customerName, customerPhone, source, reason, conversationId } = req.body;
+      const {
+        orderId, orderNumber, customerName, customerPhone, source, reason, conversationId,
+        complaintCategory, logisticsNote, selectedProduct,
+      } = req.body;
 
       let productDetails: string | undefined;
       let deliveryDetails: string | undefined;
@@ -17696,6 +17699,16 @@ export async function registerRoutes(
         }
       }
 
+      // Build structured reason from category fields
+      let structuredReason: string | null = reason || null;
+      if (complaintCategory === "order") {
+        structuredReason = orderNumber ? `Order complaint: #${orderNumber}` : "Order complaint";
+      } else if (complaintCategory === "logistics") {
+        structuredReason = logisticsNote ? `Logistics complaint: ${logisticsNote}` : "Logistics complaint";
+      } else if (complaintCategory === "product") {
+        structuredReason = selectedProduct ? `Product complaint: ${selectedProduct}` : "Product complaint";
+      }
+
       const complaint = await storage.createComplaint({
         merchantId,
         ticketNumber: "",
@@ -17708,12 +17721,75 @@ export async function registerRoutes(
         deliveryDetails: deliveryDetails || null,
         trackingNumber: trackingNumber || null,
         source: source || "other",
-        reason: reason || null,
+        reason: structuredReason,
         status: "logged",
         statusHistory: [{ status: "logged", changedAt: new Date().toISOString(), changedBy: req.user?.username || "system" }],
       });
 
-      res.json(complaint);
+      // Auto-send WhatsApp notification to customer
+      let waSent = false;
+      let waError: string | undefined;
+      const resolvedPhone = customerPhone || null;
+      if (resolvedPhone) {
+        try {
+          const merchant = await storage.getMerchant(merchantId);
+          if (merchant?.waPhoneNumberId && merchant?.waAccessToken) {
+            const displayName = resolvedCustomerName || "Customer";
+            const ticket = complaint.ticketNumber;
+            let waMessage: string;
+            if (complaintCategory === "order" && orderNumber) {
+              waMessage = `Hi ${displayName}! Your complaint regarding order #${orderNumber} has been logged. Ticket: ${ticket}. Our support team will resolve this as fast as possible. 🙏`;
+            } else if (complaintCategory === "logistics") {
+              const noteText = logisticsNote ? ` Details: ${logisticsNote}.` : "";
+              waMessage = `Hi ${displayName}! Your complaint regarding a logistics/delivery issue has been logged.${noteText} Ticket: ${ticket}. Our support team will resolve this as fast as possible. 🙏`;
+            } else if (complaintCategory === "product" && selectedProduct) {
+              waMessage = `Hi ${displayName}! Your complaint regarding "${selectedProduct}" has been logged. Ticket: ${ticket}. Our support team will resolve this as fast as possible. 🙏`;
+            } else {
+              waMessage = `Hi ${displayName}! Your complaint has been logged. Ticket: ${ticket}. Our support team will resolve this as fast as possible. 🙏`;
+            }
+
+            const { sendWhatsAppReply } = await import("./utils/integrations/whatsapp/sender");
+            const { formatPhoneForWhatsApp } = await import("./utils/integrations/whatsapp/sender");
+            const sent = await sendWhatsAppReply(
+              resolvedPhone,
+              waMessage,
+              merchant.waPhoneNumberId,
+              merchant.waAccessToken,
+            );
+
+            if (sent.success) {
+              waSent = true;
+              try {
+                const canonicalPhone = formatPhoneForWhatsApp(resolvedPhone) ?? resolvedPhone;
+                const conv = await storage.upsertConversation({
+                  merchantId,
+                  contactPhone: canonicalPhone,
+                  contactName: resolvedCustomerName ?? undefined,
+                  orderId: orderId ?? undefined,
+                  orderNumber: orderNumber ?? undefined,
+                  lastMessage: waMessage.slice(0, 200),
+                });
+                await storage.createWaMessage({
+                  conversationId: conv.id,
+                  direction: "outbound",
+                  senderName: "System",
+                  text: waMessage,
+                  status: "sent",
+                });
+              } catch (saveErr: any) {
+                console.warn("[Complaint Create] WA sent but failed to save to chat:", saveErr.message);
+              }
+            } else {
+              waError = sent.error || "WA send failed";
+            }
+          }
+        } catch (waErr: any) {
+          waError = waErr.message;
+          console.warn("[Complaint Create] WA notification failed:", waErr.message);
+        }
+      }
+
+      res.json({ ...complaint, waSent, ...(waError ? { waError } : {}) });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
