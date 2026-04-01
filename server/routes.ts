@@ -17690,6 +17690,27 @@ export async function registerRoutes(
       );
 
       if (!sent.success) return res.status(500).json({ error: sent.error || "Failed to send WhatsApp message" });
+
+      try {
+        const conv = await storage.upsertConversation({
+          merchantId,
+          contactPhone: complaint.customerPhone,
+          contactName: complaint.customerName ?? undefined,
+          orderId: complaint.orderId ?? undefined,
+          orderNumber: complaint.orderNumber ?? undefined,
+          lastMessage: finalMessage.slice(0, 200),
+        });
+        await storage.createWaMessage({
+          conversationId: conv.id,
+          direction: "outbound",
+          senderName: "System",
+          text: finalMessage,
+          status: "sent",
+        });
+      } catch (saveErr: any) {
+        console.warn("[Complaint Notify] Message sent but failed to save to wa_messages:", saveErr.message);
+      }
+
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

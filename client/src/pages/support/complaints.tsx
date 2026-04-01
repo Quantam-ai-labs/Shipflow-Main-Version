@@ -38,6 +38,7 @@ import {
   AlertCircle,
   Eye,
   Settings2,
+  Info,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -332,6 +333,10 @@ export default function SupportComplaintsPage() {
                   rows={4}
                   data-testid="textarea-notify-message"
                 />
+                <div className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+                  <Info className="w-3 h-3 shrink-0 mt-0.5" />
+                  <span>Sends as plain text — only delivered if the customer messaged in the last 24 hours</span>
+                </div>
               </div>
             </div>
             <DialogFooter>
