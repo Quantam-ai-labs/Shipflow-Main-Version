@@ -153,8 +153,12 @@ export default function SupportComplaintsPage() {
   const notifyMutation = useMutation({
     mutationFn: async ({ id, message }: { id: string; message: string }) =>
       apiRequest("POST", `/api/support/complaints/${id}/notify`, { message }),
-    onSuccess: () => {
-      toast({ title: "WhatsApp notification sent" });
+    onSuccess: (data: any) => {
+      if (data?.chatSaveWarning) {
+        toast({ title: "WhatsApp notification sent", description: "Note: " + data.chatSaveWarning, variant: "destructive" });
+      } else {
+        toast({ title: "WhatsApp notification sent" });
+      }
       setStatusChangeTarget(null);
       setNotifyMessage("");
     },

@@ -17691,10 +17691,13 @@ export async function registerRoutes(
 
       if (!sent.success) return res.status(500).json({ error: sent.error || "Failed to send WhatsApp message" });
 
+      let chatSaveWarning: string | undefined;
       try {
+        const { formatPhoneForWhatsApp } = await import("./utils/integrations/whatsapp/sender");
+        const canonicalPhone = formatPhoneForWhatsApp(complaint.customerPhone) ?? complaint.customerPhone;
         const conv = await storage.upsertConversation({
           merchantId,
-          contactPhone: complaint.customerPhone,
+          contactPhone: canonicalPhone,
           contactName: complaint.customerName ?? undefined,
           orderId: complaint.orderId ?? undefined,
           orderNumber: complaint.orderNumber ?? undefined,
@@ -17709,9 +17712,10 @@ export async function registerRoutes(
         });
       } catch (saveErr: any) {
         console.warn("[Complaint Notify] Message sent but failed to save to wa_messages:", saveErr.message);
+        chatSaveWarning = "Message sent but could not be saved to chat history";
       }
 
-      res.json({ success: true });
+      res.json({ success: true, ...(chatSaveWarning ? { chatSaveWarning } : {}) });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
