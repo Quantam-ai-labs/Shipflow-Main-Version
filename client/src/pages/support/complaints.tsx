@@ -686,7 +686,9 @@ function NewComplaintDialog({ open, onOpenChange }: { open: boolean; onOpenChang
           {complaintCategory === "product" && (
             <div className="space-y-1">
               <Label className="text-xs">Select product</Label>
-              {lookedUpLineItems.length > 0 ? (
+              {!orderId ? (
+                <p className="text-xs text-amber-500">Look up an order first to select a product.</p>
+              ) : lookedUpLineItems.length > 0 ? (
                 <Select value={selectedProduct} onValueChange={setSelectedProduct} data-testid="select-product">
                   <SelectTrigger data-testid="trigger-product">
                     <SelectValue placeholder="Choose a product..." />
@@ -699,7 +701,7 @@ function NewComplaintDialog({ open, onOpenChange }: { open: boolean; onOpenChang
                   </SelectContent>
                 </Select>
               ) : (
-                <p className="text-xs text-amber-500">Look up an order first to select a product.</p>
+                <p className="text-xs text-muted-foreground">No products found for this order.</p>
               )}
             </div>
           )}

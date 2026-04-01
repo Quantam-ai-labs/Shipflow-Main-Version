@@ -17743,7 +17743,7 @@ export async function registerRoutes(
               const noteText = logisticsNote ? ` Details: ${logisticsNote}.` : "";
               waMessage = `Hi ${displayName}! Your complaint regarding a logistics/delivery issue has been logged.${noteText} Ticket: ${ticket}. Our support team will resolve this as fast as possible. 🙏`;
             } else if (complaintCategory === "product" && selectedProduct) {
-              waMessage = `Hi ${displayName}! Your complaint regarding "${selectedProduct}" has been logged. Ticket: ${ticket}. Our support team will resolve this as fast as possible. 🙏`;
+              waMessage = `Hi ${displayName}! Your complaint regarding ${selectedProduct} has been logged. Ticket: ${ticket}. Our support team will resolve this as fast as possible. 🙏`;
             } else {
               waMessage = `Hi ${displayName}! Your complaint has been logged. Ticket: ${ticket}. Our support team will resolve this as fast as possible. 🙏`;
             }

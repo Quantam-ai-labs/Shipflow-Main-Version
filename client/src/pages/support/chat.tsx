@@ -3505,7 +3505,7 @@ function FileComplaintFromChat({
   const [ticketCreated, setTicketCreated] = useState<string | null>(null);
   const [waSent, setWaSent] = useState(false);
 
-  const { data: orderData } = useQuery<any>({
+  const { data: orderData, isLoading: orderLoading } = useQuery<any>({
     queryKey: ["/api/orders", conversation.orderId],
     queryFn: () => fetch(`/api/orders/${conversation.orderId}`).then(r => r.json()),
     enabled: complaintCategory === "product" && !!conversation.orderId,
@@ -3632,10 +3632,12 @@ function FileComplaintFromChat({
                       })}
                     </SelectContent>
                   </Select>
-                ) : conversation.orderId ? (
-                  <p className="text-xs text-muted-foreground">Loading products...</p>
-                ) : (
+                ) : !conversation.orderId ? (
                   <p className="text-xs text-amber-500">No order linked — cannot select product.</p>
+                ) : orderLoading ? (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Loading products...</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No products found for this order.</p>
                 )}
               </div>
             )}
