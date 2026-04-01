@@ -17787,6 +17787,104 @@ export async function registerRoutes(
         const errText = await response.text();
         let parsed: any = {};
         try { parsed = JSON.parse(errText); } catch {}
+
+        const isDuplicateError = (errors: any): boolean => {
+          if (!errors) return false;
+          const check = (val: any): boolean => {
+            if (typeof val === "string") return val.toLowerCase().includes("has already been taken");
+            if (Array.isArray(val)) return val.some(check);
+            if (typeof val === "object" && val !== null) return Object.values(val).some(check);
+            return false;
+          };
+          return check(errors);
+        };
+
+        if (parsed?.errors && isDuplicateError(parsed.errors)) {
+          const errors = parsed.errors;
+          const phoneIsDuplicate = phone && isDuplicateError(errors.phone);
+          const emailIsDuplicate = email && isDuplicateError(errors.email);
+          let searchField: string | null = null;
+          let searchValue: string | null = null;
+          if (phoneIsDuplicate && phone) {
+            searchField = "phone";
+            searchValue = phone;
+          } else if (emailIsDuplicate && email) {
+            searchField = "email";
+            searchValue = email;
+          } else if (phone) {
+            searchField = "phone";
+            searchValue = phone;
+          } else if (email) {
+            searchField = "email";
+            searchValue = email;
+          }
+          if (!searchField || !searchValue) {
+            const errMsg = JSON.stringify(parsed.errors);
+            return res.status(400).json({ error: `Shopify error: ${errMsg}` });
+          }
+          const qualifiedQuery = `${searchField}:"${searchValue}"`;
+          const searchUrl = `https://${store.shopDomain}/admin/api/2025-01/customers/search.json?query=${encodeURIComponent(qualifiedQuery)}&limit=5&fields=id,first_name,last_name,phone,email,default_address`;
+          const searchResponse = await fetch(searchUrl, {
+            headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
+          });
+          if (!searchResponse.ok) {
+            const errMsg = JSON.stringify(parsed.errors);
+            return res.status(400).json({ error: `Shopify error: ${errMsg}` });
+          }
+          const searchData = await searchResponse.json();
+          const normalizePhone = (p: string) => p.replace(/\D/g, "");
+          const normalizeEmail = (e: string) => e.trim().toLowerCase();
+          const existingCustomer = (searchData.customers || []).find((c: any) => {
+            if (searchField === "phone") {
+              return c.phone && normalizePhone(c.phone) === normalizePhone(searchValue as string);
+            }
+            return c.email && normalizeEmail(c.email) === normalizeEmail(searchValue as string);
+          });
+          if (!existingCustomer) {
+            const errMsg = JSON.stringify(parsed.errors);
+            return res.status(400).json({ error: `Shopify error: ${errMsg}` });
+          }
+          const updatePayload: any = {
+            customer: {
+              id: existingCustomer.id,
+              first_name: firstName || existingCustomer.first_name || "",
+              last_name: lastName || existingCustomer.last_name || "",
+            },
+          };
+          if (email) updatePayload.customer.email = email;
+          if (phone) updatePayload.customer.phone = phone;
+          if (address || city) {
+            const existingAddr = existingCustomer.default_address || {};
+            updatePayload.customer.addresses = [
+              {
+                address1: address || existingAddr.address1 || "",
+                city: city || existingAddr.city || "",
+                country: "Pakistan",
+                country_code: "PK",
+              },
+            ];
+          }
+          const updateUrl = `https://${store.shopDomain}/admin/api/2025-01/customers/${existingCustomer.id}.json`;
+          const updateResponse = await fetch(updateUrl, {
+            method: "PUT",
+            headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
+            body: JSON.stringify(updatePayload),
+          });
+          if (!updateResponse.ok) {
+            const updateErrText = await updateResponse.text();
+            let updateParsed: any = {};
+            try { updateParsed = JSON.parse(updateErrText); } catch {}
+            const updateErrMsg = updateParsed?.errors ? JSON.stringify(updateParsed.errors) : updateErrText;
+            return res.status(400).json({ error: `Shopify error: ${updateErrMsg}` });
+          }
+          const updateData = await updateResponse.json();
+          const updated = updateData.customer;
+          return res.json({
+            shopifyCustomerId: String(updated.id),
+            name: `${updated.first_name || ""} ${updated.last_name || ""}`.trim(),
+          });
+        }
+
         const errMsg = parsed?.errors ? JSON.stringify(parsed.errors) : errText;
         return res.status(400).json({ error: `Shopify error: ${errMsg}` });
       }
