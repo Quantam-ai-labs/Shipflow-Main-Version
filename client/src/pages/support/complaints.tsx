@@ -108,7 +108,8 @@ function replaceTemplatePlaceholders(template: string, complaint: Complaint): st
     .replace(/\{\{ticketNumber\}\}/g, complaint.ticketNumber)
     .replace(/\{\{orderNumber\}\}/g, complaint.orderNumber || "N/A")
     .replace(/\{\{status\}\}/g, STATUS_CONFIG[complaint.status]?.label || complaint.status)
-    .replace(/\{\{reason\}\}/g, complaint.reason || "N/A");
+    .replace(/\{\{reason\}\}/g, complaint.reason || "N/A")
+    .replace(/\{\{source\}\}/g, SOURCE_LABELS[complaint.source] || complaint.source);
 }
 
 export default function SupportComplaintsPage() {
@@ -878,7 +879,7 @@ function TemplatesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                         data-testid={`textarea-template-${status}`}
                       />
                       <p className="text-[10px] text-muted-foreground">
-                        Placeholders: {"{{customerName}}"}, {"{{ticketNumber}}"}, {"{{orderNumber}}"}, {"{{status}}"}, {"{{reason}}"}
+                        Placeholders: {"{{customerName}}"}, {"{{ticketNumber}}"}, {"{{orderNumber}}"}, {"{{status}}"}, {"{{reason}}"}, {"{{source}}"}
                       </p>
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => saveMutation.mutate({ status, messageTemplate: editValue })} disabled={saveMutation.isPending} data-testid={`button-save-template-${status}`}>

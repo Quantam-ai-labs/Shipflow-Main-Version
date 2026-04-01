@@ -2575,7 +2575,7 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getComplaintTemplates(merchantId);
     if (existing.length > 0) return existing;
     const defaults: { status: string; messageTemplate: string }[] = [
-      { status: "logged", messageTemplate: "Hi {{customerName}}! Your complaint has been logged. 📋 Ticket: {{ticketNumber}}. Reason: {{reason}}. Our support team will look into this and get back to you as soon as possible. 🙏" },
+      { status: "logged", messageTemplate: "Hi {{customerName}}! Your complaint has been logged. 📋 Ticket: {{ticketNumber}}.\nCategory/Reason: {{reason}}\nSource: {{source}}\nOur support team will look into this and get back to you as soon as possible. 🙏" },
       { status: "in_progress", messageTemplate: "Hi {{customerName}}, your complaint ({{ticketNumber}}) is being reviewed by our team. We'll update you soon." },
       { status: "under_investigation", messageTemplate: "Hi {{customerName}}, we're investigating your complaint ({{ticketNumber}}). Thank you for your patience." },
       { status: "resolving", messageTemplate: "Hi {{customerName}}, we're working on resolving your complaint ({{ticketNumber}}). You'll hear from us shortly." },
