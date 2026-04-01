@@ -7833,7 +7833,7 @@ export async function registerRoutes(
         if (/\{\{\d+\}\}/.test(rawMsg)) {
           templateParams = buildTemplateParamsFromBody(rawMsg, vars, retryAutomation?.variableOrder);
         } else {
-          templateParams = extractMessageTextParams(retryAutomation.messageText, vars);
+          templateParams = extractMessageTextParams(rawMsg, vars);
         }
       }
 
