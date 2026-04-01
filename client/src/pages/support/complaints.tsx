@@ -342,7 +342,7 @@ export default function SupportComplaintsPage() {
                   value={notifyMessage}
                   onChange={e => setNotifyMessage(e.target.value)}
                   rows={4}
-                  placeholder="Type a message or leave blank to skip..."
+                  placeholder="Enter your WhatsApp message..."
                   data-testid="textarea-notify-message"
                 />
                 <div className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
@@ -432,7 +432,7 @@ function ComplaintDetailPanel({
     const loggedTemplate = templates.find(t => t.status === "logged");
     const prefilled = loggedTemplate
       ? replaceTemplatePlaceholders(loggedTemplate.messageTemplate, complaint)
-      : `Hi! Your complaint has been logged. Ticket: ${complaint.ticketNumber}. Our team will review it shortly.`;
+      : `Hi! Your complaint has been logged. Ticket: ${complaint.ticketNumber}.${complaint.reason ? ` Reason: ${complaint.reason}.` : ""} Our team will review it shortly.`;
     setFiledMessage(prefilled);
     setShowFiledNotify(true);
   };
