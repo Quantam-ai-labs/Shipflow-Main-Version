@@ -30,8 +30,11 @@ function deserializeRange(stored: string): DateRange | undefined {
   if (!stored) return undefined;
   if (stored.startsWith("preset:")) {
     const label = stored.slice(7);
-    // Migrate stale "Today" default to "Last 7 days"
-    if (label === "Today") return getDefaultRange();
+    // Migrate stale "Today" default to "Last 7 days" (one-time persisted migration)
+    if (label === "Today") {
+      try { localStorage.setItem(STORAGE_KEY, `preset:${DEFAULT_PRESET}`); } catch {}
+      return getDefaultRange();
+    }
     const preset = getPresetByLabel(label);
     if (preset) return preset.getValue();
     // Unknown preset — fall back to default
