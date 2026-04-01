@@ -775,6 +775,8 @@ export default function SupportChatPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<WaMetaTemplate | null>(null);
   const [templateVars, setTemplateVars] = useState<Record<string, string>>({});
   const [orderVars, setOrderVars] = useState<Record<string, string> | null>(null);
+  const [activeDialogTab, setActiveDialogTab] = useState<'template' | 'plaintext'>('template');
+  const [plainTextMessage, setPlainTextMessage] = useState("");
 
   // Link preview state (compose)
   const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null);
@@ -3140,182 +3142,276 @@ export default function SupportChatPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Template Picker Dialog */}
-      <Dialog open={templatePickerOpen} onOpenChange={(v) => { setTemplatePickerOpen(v); if (!v) { setSelectedTemplate(null); setTemplateSearch(""); setTemplateVars({}); } }}>
+      {/* Template / Plain Text Picker Dialog */}
+      <Dialog open={templatePickerOpen} onOpenChange={(v) => { setTemplatePickerOpen(v); if (!v) { setSelectedTemplate(null); setTemplateSearch(""); setTemplateVars({}); setActiveDialogTab('template'); setPlainTextMessage(""); } }}>
         <DialogContent className="max-w-lg max-h-[80vh] flex flex-col p-0 gap-0" data-testid="template-picker-dialog">
-          <DialogHeader className="px-4 pt-4 pb-3 border-b border-border shrink-0">
-            <DialogTitle className="flex items-center gap-2">
+          <DialogHeader className="px-4 pt-4 pb-0 shrink-0">
+            <DialogTitle className="flex items-center gap-2 mb-3 text-base">
               <Zap className="w-4 h-4 text-[#008069]" />
-              Send Template Message
+              Send Message
             </DialogTitle>
+            {/* Mode tabs */}
+            <div className="flex -mx-4">
+              <button
+                onClick={() => setActiveDialogTab('template')}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors flex-1 justify-center",
+                  activeDialogTab === 'template'
+                    ? "border-[#008069] text-[#008069]"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                )}
+                data-testid="tab-template"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Template
+              </button>
+              <button
+                onClick={() => setActiveDialogTab('plaintext')}
+                className={cn(
+                  "flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors flex-1 justify-center",
+                  activeDialogTab === 'plaintext'
+                    ? "border-[#008069] text-[#008069]"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                )}
+                data-testid="tab-plaintext"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                Plain Text
+              </button>
+            </div>
           </DialogHeader>
 
-          {/* Search */}
-          <div className="px-4 py-2 border-b border-border shrink-0">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Search templates..."
-                value={templateSearch}
-                onChange={(e) => setTemplateSearch(e.target.value)}
-                className="pl-8 h-8 text-sm"
-                data-testid="input-template-search"
-              />
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-hidden flex">
-            {/* Template list */}
-            <div className="w-1/2 border-r border-border overflow-y-auto">
-              {filteredTemplates.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground">
-                  <Zap className="w-8 h-8 mb-2 opacity-30" />
-                  <p className="text-sm">No approved templates</p>
+          {activeDialogTab === 'template' && (
+            <>
+              {/* Search */}
+              <div className="px-4 py-2 border-b border-border shrink-0">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search templates..."
+                    value={templateSearch}
+                    onChange={(e) => setTemplateSearch(e.target.value)}
+                    className="pl-8 h-8 text-sm"
+                    data-testid="input-template-search"
+                  />
                 </div>
-              ) : (
-                <div className="divide-y divide-border">
-                  {filteredTemplates.map(t => (
-                    <button
-                      key={t.id}
-                      className={cn(
-                        "w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors",
-                        selectedTemplate?.id === t.id && "bg-[#008069]/10 border-l-2 border-[#008069]"
-                      )}
-                      onClick={() => {
-                        setSelectedTemplate(t);
-                        if (orderVars && t.body) {
-                          const nums = [...new Set(Array.from(t.body.matchAll(/\{\{(\d+)\}\}/g)).map(m => m[1]))].sort();
-                          const autoFilled: Record<string, string> = {};
-                          nums.forEach(n => {
-                            const varKey = TEMPLATE_VAR_ORDER[parseInt(n) - 1];
-                            if (varKey && orderVars[varKey]) autoFilled[n] = orderVars[varKey];
-                          });
-                          setTemplateVars(autoFilled);
-                        } else {
-                          setTemplateVars({});
-                        }
-                      }}
-                      data-testid={`template-item-${t.id}`}
-                    >
-                      <p className="text-xs font-medium text-foreground">{t.name}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{t.body}</p>
-                      {t.category && (
-                        <span className="inline-block mt-1 text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
-                          {t.category}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+              </div>
 
-            {/* Template preview + variable inputs */}
-            <div className="w-1/2 overflow-y-auto p-3 flex flex-col gap-3">
-              {selectedTemplate ? (() => {
-                const bodyVarNums = [...new Set(Array.from(selectedTemplate.body?.matchAll(/\{\{(\d+)\}\}/g) || []).map(m => m[1]))].sort();
-                const resolvedBody = bodyVarNums.reduce((t, n) => t.replaceAll(`{{${n}}}`, templateVars[n] || `{{${n}}}`), selectedTemplate.body || "");
-                const components: WaTemplateComponent[] = bodyVarNums.length > 0 ? [{
-                  type: "body",
-                  parameters: bodyVarNums.map(n => ({ type: "text", text: templateVars[n] || "" })),
-                }] : [];
-                return (
-                  <>
-                    <div className="bg-[#dcf8c6] dark:bg-[#005c4b] rounded-lg p-3 text-sm text-[#111b21] dark:text-[#e9edef] whitespace-pre-wrap">
-                      {selectedTemplate.headerText && (
-                        <p className="font-semibold mb-1">{selectedTemplate.headerText}</p>
-                      )}
-                      <p className="text-xs leading-relaxed">{resolvedBody}</p>
-                      {selectedTemplate.footer && (
-                        <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-1">{selectedTemplate.footer}</p>
-                      )}
-                      {selectedTemplate.buttons && selectedTemplate.buttons.length > 0 && (
-                        <div className="mt-2 space-y-1 border-t border-black/10 dark:border-white/10 pt-2">
-                          {selectedTemplate.buttons.map((btn: WaTemplateButton, i: number) => (
-                            <div key={i} className="text-[11px] text-[#008069] font-medium text-center py-0.5">
-                              {btn.text}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+              <div className="flex-1 overflow-hidden flex">
+                {/* Template list */}
+                <div className="w-1/2 border-r border-border overflow-y-auto">
+                  {filteredTemplates.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground">
+                      <Zap className="w-8 h-8 mb-2 opacity-30" />
+                      <p className="text-sm">No approved templates</p>
                     </div>
-                    {bodyVarNums.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Fill Variables</p>
-                          {orderVars && <span className="text-[10px] text-[#008069] font-medium">Auto-filled from order</span>}
-                        </div>
-                        {bodyVarNums.map(n => {
-                          const varKey = TEMPLATE_VAR_ORDER[parseInt(n) - 1];
-                          const label = varKey ? TEMPLATE_VAR_LABELS[varKey] || varKey : `Variable ${n}`;
-                          return (
-                            <div key={n}>
-                              <label className="text-xs text-muted-foreground mb-0.5 block">
-                                <span className="font-mono">{`{{${n}}}`}</span>
-                                {varKey && <span className="ml-1 text-muted-foreground/70">— {label}</span>}
-                              </label>
-                              <Input
-                                placeholder={label}
-                                value={templateVars[n] || ""}
-                                onChange={(e) => setTemplateVars(prev => ({ ...prev, [n]: e.target.value }))}
-                                className="h-7 text-xs"
-                                data-testid={`input-template-var-${n}`}
-                              />
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {filteredTemplates.map(t => (
+                        <button
+                          key={t.id}
+                          className={cn(
+                            "w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors",
+                            selectedTemplate?.id === t.id && "bg-[#008069]/10 border-l-2 border-[#008069]"
+                          )}
+                          onClick={() => {
+                            setSelectedTemplate(t);
+                            if (orderVars && t.body) {
+                              const nums = [...new Set(Array.from(t.body.matchAll(/\{\{(\d+)\}\}/g)).map(m => m[1]))].sort();
+                              const autoFilled: Record<string, string> = {};
+                              nums.forEach(n => {
+                                const varKey = TEMPLATE_VAR_ORDER[parseInt(n) - 1];
+                                if (varKey && orderVars[varKey]) autoFilled[n] = orderVars[varKey];
+                              });
+                              setTemplateVars(autoFilled);
+                            } else {
+                              setTemplateVars({});
+                            }
+                          }}
+                          data-testid={`template-item-${t.id}`}
+                        >
+                          <p className="text-xs font-medium text-foreground">{t.name}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{t.body}</p>
+                          {t.category && (
+                            <span className="inline-block mt-1 text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                              {t.category}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Template preview + variable inputs */}
+                <div className="w-1/2 overflow-y-auto p-3 flex flex-col gap-3">
+                  {selectedTemplate ? (() => {
+                    const bodyVarNums = [...new Set(Array.from(selectedTemplate.body?.matchAll(/\{\{(\d+)\}\}/g) || []).map(m => m[1]))].sort();
+                    const resolvedBody = bodyVarNums.reduce((t, n) => t.replaceAll(`{{${n}}}`, templateVars[n] || `{{${n}}}`), selectedTemplate.body || "");
+                    const components: WaTemplateComponent[] = bodyVarNums.length > 0 ? [{
+                      type: "body",
+                      parameters: bodyVarNums.map(n => ({ type: "text", text: templateVars[n] || "" })),
+                    }] : [];
+                    return (
+                      <>
+                        <div className="bg-[#dcf8c6] dark:bg-[#005c4b] rounded-lg p-3 text-sm text-[#111b21] dark:text-[#e9edef] whitespace-pre-wrap">
+                          {selectedTemplate.headerText && (
+                            <p className="font-semibold mb-1">{selectedTemplate.headerText}</p>
+                          )}
+                          <p className="text-xs leading-relaxed">{resolvedBody}</p>
+                          {selectedTemplate.footer && (
+                            <p className="text-[11px] text-[#667781] dark:text-[#8696a0] mt-1">{selectedTemplate.footer}</p>
+                          )}
+                          {selectedTemplate.buttons && selectedTemplate.buttons.length > 0 && (
+                            <div className="mt-2 space-y-1 border-t border-black/10 dark:border-white/10 pt-2">
+                              {selectedTemplate.buttons.map((btn: WaTemplateButton, i: number) => (
+                                <div key={i} className="text-[11px] text-[#008069] font-medium text-center py-0.5">
+                                  {btn.text}
+                                </div>
+                              ))}
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    <div className="flex flex-col gap-2">
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => {
-                          if (selectedTemplate?.body) {
-                            setMessageText(resolvedBody);
-                            setTemplatePickerOpen(false);
-                            setSelectedTemplate(null);
-                            setTemplateSearch("");
-                            setTemplateVars({});
-                            setTimeout(() => inputRef.current?.focus(), 50);
-                          }
-                        }}
-                        data-testid="button-fill-template"
-                      >
-                        <Pencil className="w-4 h-4 mr-2" />
-                        Fill in Compose
-                      </Button>
-                      <Button
-                        className="w-full bg-[#008069] hover:bg-[#017561] text-white"
-                        onClick={() => {
-                          if (selectedConvId && selectedTemplate) {
-                            sendTemplateMutation.mutate({
-                              convId: selectedConvId,
-                              templateId: selectedTemplate.id,
-                              components: components.length > 0 ? components : undefined,
-                            });
-                          }
-                        }}
-                        disabled={sendTemplateMutation.isPending}
-                        data-testid="button-send-template"
-                      >
-                        {sendTemplateMutation.isPending ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <Send className="w-4 h-4 mr-2" />
+                          )}
+                        </div>
+                        {bodyVarNums.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Fill Variables</p>
+                              {orderVars && <span className="text-[10px] text-[#008069] font-medium">Auto-filled from order</span>}
+                            </div>
+                            {bodyVarNums.map(n => {
+                              const varKey = TEMPLATE_VAR_ORDER[parseInt(n) - 1];
+                              const label = varKey ? TEMPLATE_VAR_LABELS[varKey] || varKey : `Variable ${n}`;
+                              return (
+                                <div key={n}>
+                                  <label className="text-xs text-muted-foreground mb-0.5 block">
+                                    <span className="font-mono">{`{{${n}}}`}</span>
+                                    {varKey && <span className="ml-1 text-muted-foreground/70">— {label}</span>}
+                                  </label>
+                                  <Input
+                                    placeholder={label}
+                                    value={templateVars[n] || ""}
+                                    onChange={(e) => setTemplateVars(prev => ({ ...prev, [n]: e.target.value }))}
+                                    className="h-7 text-xs"
+                                    data-testid={`input-template-var-${n}`}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
-                        Send Now
-                      </Button>
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() => {
+                              if (selectedTemplate?.body) {
+                                setMessageText(resolvedBody);
+                                setTemplatePickerOpen(false);
+                                setSelectedTemplate(null);
+                                setTemplateSearch("");
+                                setTemplateVars({});
+                                setTimeout(() => inputRef.current?.focus(), 50);
+                              }
+                            }}
+                            data-testid="button-fill-template"
+                          >
+                            <Pencil className="w-4 h-4 mr-2" />
+                            Fill in Compose
+                          </Button>
+                          <Button
+                            className="w-full bg-[#008069] hover:bg-[#017561] text-white"
+                            onClick={() => {
+                              if (selectedConvId && selectedTemplate) {
+                                sendTemplateMutation.mutate({
+                                  convId: selectedConvId,
+                                  templateId: selectedTemplate.id,
+                                  components: components.length > 0 ? components : undefined,
+                                });
+                              }
+                            }}
+                            disabled={sendTemplateMutation.isPending}
+                            data-testid="button-send-template"
+                          >
+                            {sendTemplateMutation.isPending ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <Send className="w-4 h-4 mr-2" />
+                            )}
+                            Send Now
+                          </Button>
+                        </div>
+                      </>
+                    );
+                  })() : (
+                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                      <p className="text-sm">Select a template to preview</p>
                     </div>
-                  </>
-                );
-              })() : (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                  <p className="text-sm">Select a template to preview</p>
+                  )}
                 </div>
-              )}
+              </div>
+            </>
+          )}
+
+          {activeDialogTab === 'plaintext' && (
+            <div className="flex flex-col flex-1 p-4 gap-3 overflow-y-auto">
+              <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-md px-3 py-2">
+                <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>Plain text only works if the customer messaged you in the last 24 hours. Use a template for older conversations.</span>
+              </div>
+              <Textarea
+                placeholder="Type your message..."
+                value={plainTextMessage}
+                onChange={(e) => setPlainTextMessage(e.target.value)}
+                className="resize-none min-h-[120px] text-sm"
+                data-testid="textarea-plaintext-message"
+                autoFocus
+              />
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    if (plainTextMessage.trim()) {
+                      setMessageText(plainTextMessage.trim());
+                      setTemplatePickerOpen(false);
+                      setPlainTextMessage("");
+                      setActiveDialogTab('template');
+                      setTimeout(() => inputRef.current?.focus(), 50);
+                    }
+                  }}
+                  disabled={!plainTextMessage.trim()}
+                  data-testid="button-fill-plaintext"
+                >
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Fill in Compose
+                </Button>
+                <Button
+                  className="w-full bg-[#008069] hover:bg-[#017561] text-white"
+                  onClick={() => {
+                    if (selectedConvId && plainTextMessage.trim()) {
+                      sendMutation.mutate({ text: plainTextMessage.trim() }, {
+                        onSuccess: () => {
+                          setTemplatePickerOpen(false);
+                          setPlainTextMessage("");
+                          setActiveDialogTab('template');
+                          toast({ title: "Message sent" });
+                        },
+                      });
+                    }
+                  }}
+                  disabled={!plainTextMessage.trim() || sendMutation.isPending}
+                  data-testid="button-send-plaintext"
+                >
+                  {sendMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
+                  Send Now
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
