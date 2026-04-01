@@ -1,6 +1,6 @@
 import { db, withRetry } from "../db";
-import { orders, merchants, robocallLogs, waAutomations } from "@shared/schema";
-import { eq, and, isNull, isNotNull, lte, inArray } from "drizzle-orm";
+import { orders, merchants, robocallLogs, waAutomations, waConversations, waMessages } from "@shared/schema";
+import { eq, and, isNull, isNotNull, lte, inArray, gte } from "drizzle-orm";
 import { logConfirmationEvent } from "./confirmationEngine";
 import { formatPhoneForWhatsApp, sendWhatsAppApiRequest, sendWhatsAppTextMessage } from "../utils/integrations/whatsapp/sender";
 import { interpolateMessageBody, buildVarsFromParams } from "../utils/integrations/whatsapp/variables";
@@ -9,7 +9,7 @@ import { triggerRobocallForOrder, checkAndSendPendingCalls, retryFailedCalls } f
 const LOG_PREFIX = "[ConfirmationTimer]";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
-type RetryAttempt = { messageText: string; delayHours: number };
+type RetryAttempt = { messageText: string; delayHours: number; templateName?: string };
 
 function getRetryAttemptForIndex(automation: any, index: number): RetryAttempt | null {
   const attempts: RetryAttempt[] | null = automation?.retryAttempts;
@@ -38,6 +38,74 @@ function getNextAttemptDelay(automation: any, merchant: any, currentAttempt: num
 
 const WA_PERMANENT_ERROR_RE = /\(#100\)|\(#131008\)|\(#132000\)|\(#132001\)|\(#132018\)/;
 
+async function hasInboundMessageWithin24h(formattedPhone: string, merchantId: string): Promise<boolean> {
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [conv] = await db.select({ id: waConversations.id })
+      .from(waConversations)
+      .where(and(
+        eq(waConversations.merchantId, merchantId),
+        eq(waConversations.contactPhone, formattedPhone),
+      ))
+      .limit(1);
+
+    if (!conv) return false;
+
+    const [recentInbound] = await db.select({ id: waMessages.id })
+      .from(waMessages)
+      .where(and(
+        eq(waMessages.conversationId, conv.id),
+        eq(waMessages.direction, "inbound"),
+        gte(waMessages.createdAt, since),
+      ))
+      .limit(1);
+
+    return !!recentInbound;
+  } catch (err: any) {
+    console.warn(`${LOG_PREFIX} Failed to check 24h inbound window for ${formattedPhone}:`, err.message);
+    return false;
+  }
+}
+
+async function sendWaReminderViaTemplate(
+  formattedPhone: string,
+  templateName: string,
+  order: any,
+  merchant: any,
+): Promise<{ sent: boolean; permanentError?: boolean; error?: string; templateUsed?: string | null }> {
+  try {
+    const result = await sendWhatsAppApiRequest({
+      formattedPhone,
+      templateName,
+      messageText: "",
+      orderNumber: order.orderNumber,
+      phoneNumberId: merchant.waPhoneNumberId || undefined,
+      accessToken: merchant.waAccessToken || undefined,
+    });
+
+    if (result.success) {
+      console.log(`${LOG_PREFIX} WA reminder sent for order #${order.orderNumber} (template: ${templateName})`);
+      return { sent: true, templateUsed: templateName };
+    }
+
+    if (result.notOnWhatsApp) {
+      console.warn(`${LOG_PREFIX} Number not on WhatsApp for order #${order.orderNumber} — flagging`);
+      await db.update(orders).set({
+        waNotOnWhatsApp: true,
+        waNextAttemptAt: null,
+      }).where(eq(orders.id, order.id));
+      return { sent: false, error: result.error };
+    }
+
+    const isPermanent = WA_PERMANENT_ERROR_RE.test(result.error || "");
+    console.error(`${LOG_PREFIX} WA reminder failed for order #${order.orderNumber}: ${result.error}${isPermanent ? " (permanent)" : ""}`);
+    return { sent: false, permanentError: isPermanent, error: result.error };
+  } catch (err: any) {
+    console.error(`${LOG_PREFIX} WA reminder error for order #${order.orderNumber}:`, err.message);
+    return { sent: false, error: err.message };
+  }
+}
+
 async function sendWaReminder(order: any, merchant: any, automation: any, attemptNumber: number): Promise<{ sent: boolean; permanentError?: boolean; error?: string; templateUsed?: string | null }> {
   const formattedPhone = formatPhoneForWhatsApp(order.customerPhone);
   if (!formattedPhone) return { sent: false };
@@ -46,9 +114,32 @@ async function sendWaReminder(order: any, merchant: any, automation: any, attemp
   const retryAttempt = retryIndex >= 0 ? getRetryAttemptForIndex(automation, retryIndex) : null;
 
   if (retryAttempt) {
+    if (retryAttempt.templateName?.trim()) {
+      console.log(`${LOG_PREFIX} Retry attempt ${attemptNumber} using template "${retryAttempt.templateName}" for order #${order.orderNumber}`);
+      return sendWaReminderViaTemplate(formattedPhone, retryAttempt.templateName.trim(), order, merchant);
+    }
+
+    const fallbackTemplate = attemptNumber === 1
+      ? merchant.waConfirmTemplate1 || null
+      : attemptNumber === 2
+      ? merchant.waConfirmTemplate2 || null
+      : attemptNumber === 3
+      ? merchant.waConfirmTemplate3 || null
+      : null;
+    if (fallbackTemplate) {
+      console.log(`${LOG_PREFIX} Retry attempt ${attemptNumber} has no templateName — falling back to merchant global template "${fallbackTemplate}" for order #${order.orderNumber}`);
+      return sendWaReminderViaTemplate(formattedPhone, fallbackTemplate, order, merchant);
+    }
+
     const rawText = retryAttempt.messageText?.trim();
     if (!rawText) {
       console.log(`${LOG_PREFIX} Retry attempt ${attemptNumber} has empty message text for order #${order.orderNumber}, skipping`);
+      return { sent: false };
+    }
+
+    const inWindow = await hasInboundMessageWithin24h(formattedPhone, order.merchantId);
+    if (!inWindow) {
+      console.warn(`${LOG_PREFIX} Retry attempt ${attemptNumber} for order #${order.orderNumber}: no template available and customer service window is closed — skipping free-form message to avoid WhatsApp rejection`);
       return { sent: false };
     }
 
@@ -77,7 +168,7 @@ async function sendWaReminder(order: any, merchant: any, automation: any, attemp
       });
 
       if (result.success) {
-        console.log(`${LOG_PREFIX} WA reminder #${attemptNumber} sent (plain text) for order #${order.orderNumber}`);
+        console.log(`${LOG_PREFIX} WA reminder #${attemptNumber} sent (plain text, 24h window open) for order #${order.orderNumber}`);
         return { sent: true };
       }
 
@@ -112,37 +203,7 @@ async function sendWaReminder(order: any, merchant: any, automation: any, attemp
     return { sent: false };
   }
 
-  try {
-    const result = await sendWhatsAppApiRequest({
-      formattedPhone,
-      templateName,
-      messageText: "",
-      orderNumber: order.orderNumber,
-      phoneNumberId: merchant.waPhoneNumberId || undefined,
-      accessToken: merchant.waAccessToken || undefined,
-    });
-
-    if (result.success) {
-      console.log(`${LOG_PREFIX} WA reminder #${attemptNumber} sent for order #${order.orderNumber} (template: ${templateName})`);
-      return { sent: true, templateUsed: templateName };
-    }
-
-    if (result.notOnWhatsApp) {
-      console.warn(`${LOG_PREFIX} Number not on WhatsApp for order #${order.orderNumber} — flagging`);
-      await db.update(orders).set({
-        waNotOnWhatsApp: true,
-        waNextAttemptAt: null,
-      }).where(eq(orders.id, order.id));
-      return { sent: false, error: result.error };
-    }
-
-    const isPermanent = WA_PERMANENT_ERROR_RE.test(result.error || "");
-    console.error(`${LOG_PREFIX} WA reminder failed for order #${order.orderNumber}: ${result.error}${isPermanent ? " (permanent)" : ""}`);
-    return { sent: false, permanentError: isPermanent, error: result.error };
-  } catch (err: any) {
-    console.error(`${LOG_PREFIX} WA reminder error for order #${order.orderNumber}:`, err.message);
-    return { sent: false, error: err.message };
-  }
+  return sendWaReminderViaTemplate(formattedPhone, templateName, order, merchant);
 }
 
 async function checkWaReattempts() {
@@ -298,8 +359,10 @@ async function checkWaReattempts() {
             eventType: "WA_REMINDER_SENT",
             channel: "whatsapp",
             retryCount: nextAttemptNumber,
-            note: retryAttempt
-              ? `WhatsApp follow-up reminder #${nextAttemptNumber} sent (plain text)`
+            note: reminderResult.templateUsed
+              ? `WhatsApp follow-up reminder #${nextAttemptNumber} sent (Template: ${reminderResult.templateUsed})`
+              : retryAttempt
+              ? `WhatsApp follow-up reminder #${nextAttemptNumber} sent (plain text, 24h window)`
               : `WhatsApp reminder #${nextAttemptNumber} sent (Template: ${merchant[`waConfirmTemplate${nextAttemptNumber}`]})`,
           });
 
