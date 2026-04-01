@@ -111,7 +111,7 @@ import {
 } from "./services/shopifyWriteBack";
 import { leopardsService } from "./services/couriers/leopards";
 import { postexService } from "./services/couriers/postex";
-import { getCourierSyncMetrics, cleanupStaleManualSyncProgress, autoTransitionOrder, getLastCourierSyncResult } from "./services/courierSyncScheduler";
+import { getCourierSyncMetrics, cleanupStaleManualSyncProgress, autoTransitionOrder, getLastCourierSyncResult, startManualCourierSync } from "./services/courierSyncScheduler";
 import { getShopifySyncMetrics } from "./services/autoSync";
 import { processConfirmationResponse, logConfirmationEvent, createNotification } from "./services/confirmationEngine";
 import { sendCallDirect, safeFetchJson as robocallFetchJson } from "./services/robocallService";
@@ -15580,13 +15580,25 @@ export async function registerRoutes(
       const totalFixed = results.reduce((sum, r) => sum + r.rows.length, 0);
       console.log(`[Admin] HxS tracking fix applied by ${adminId}: ${totalFixed} orders updated`);
 
+      // Trigger courier sync for the merchant so corrected tracking numbers
+      // are immediately re-checked against the Leopards API.
+      // #26770 is excluded (reset to CANCELLED, no tracking).
+      // #24946, #25155, #25465 need fresh status pulled with their corrected tracking.
+      let syncTriggered = false;
+      const anyTrackingFixed = [fix24946, fix25155, fix25465].some(r => r.rows.length > 0);
+      if (anyTrackingFixed) {
+        syncTriggered = startManualCourierSync(LALA_IMPORT_MERCHANT_ID);
+        console.log(`[Admin] Triggered courier re-sync for merchant ${LALA_IMPORT_MERCHANT_ID} after tracking correction (started: ${syncTriggered})`);
+      }
+
       res.json({
         success: true,
         totalFixed,
         results,
+        courierSyncTriggered: syncTriggered,
         message: totalFixed === 0
           ? "No rows matched — fix may have already been applied or tracking values differ from expected"
-          : `Fixed ${totalFixed} order(s)`,
+          : `Fixed ${totalFixed} order(s)${syncTriggered ? '; courier re-sync triggered' : ''}`,
       });
     } catch (error: any) {
       console.error("[Admin] HxS tracking fix failed:", error);
