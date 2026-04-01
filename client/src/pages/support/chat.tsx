@@ -228,7 +228,6 @@ function StatusTicks({ status, createdAt, sentAt, deliveredAt, readAt }: {
     status === "read" ? <CheckCheck className="w-3.5 h-3.5 text-blue-400 inline-block ml-1" /> :
     status === "delivered" ? <CheckCheck className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" /> :
     status === "sent" ? <Check className="w-3.5 h-3.5 text-muted-foreground inline-block ml-1" /> :
-    status === "failed" ? <AlertCircle className="w-3.5 h-3.5 text-red-500 inline-block ml-1" /> :
     null;
 
   if (!icon) return null;
@@ -1500,6 +1499,18 @@ export default function SupportChatPage() {
     },
   });
 
+  const retryMutation = useMutation({
+    mutationFn: async ({ convId, msgId }: { convId: string; msgId: string }) =>
+      apiRequest("POST", `/api/support/conversations/${convId}/messages/${msgId}/retry`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations", selectedConvId, "messages"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/support/conversations"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Retry failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const sendTemplateMutation = useMutation({
     mutationFn: async ({ convId, templateId, components }: { convId: string; templateId: string; components?: WaTemplateComponent[] }) =>
       apiRequest("POST", `/api/support/conversations/${convId}/send-template`, { templateId, components }),
@@ -2108,6 +2119,26 @@ export default function SupportChatPage() {
               Copy text
             </button>
           )}
+          {msgContextMenu.msg.status === "failed" && msgContextMenu.msg.direction === "outbound" && (
+            <button
+              className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-accent rounded transition-colors text-red-500"
+              disabled={retryMutation.isPending}
+              onClick={() => {
+                if (selectedConv) {
+                  retryMutation.mutate({ convId: selectedConv.id, msgId: msgContextMenu.msg.id });
+                }
+                setMsgContextMenu(null);
+              }}
+              data-testid="msg-ctx-retry"
+            >
+              {retryMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <AlertCircle className="w-4 h-4" />
+              )}
+              Retry sending
+            </button>
+          )}
           <div className="border-t border-border my-1" />
           <div className="px-3 py-1.5 text-[10px] text-muted-foreground space-y-0.5">
             <div className="flex items-center gap-1.5">
@@ -2542,6 +2573,37 @@ export default function SupportChatPage() {
                                     )}
                                   </div>
                                 </div>
+
+                                {isOutbound && msg.status === "failed" && (
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <button
+                                        className="flex items-center gap-1 mt-0.5 text-[11px] text-red-500 hover:text-red-600 cursor-pointer select-none"
+                                        data-testid={`not-delivered-${msg.id}`}
+                                      >
+                                        <AlertCircle className="w-3 h-3" />
+                                        Not delivered
+                                      </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent side="bottom" align="end" className="w-auto p-2">
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        className="h-7 text-xs"
+                                        disabled={retryMutation.isPending}
+                                        onClick={() => retryMutation.mutate({ convId: selectedConv!.id, msgId: msg.id })}
+                                        data-testid={`retry-btn-${msg.id}`}
+                                      >
+                                        {retryMutation.isPending ? (
+                                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                        ) : (
+                                          <AlertCircle className="w-3 h-3 mr-1" />
+                                        )}
+                                        Retry sending
+                                      </Button>
+                                    </PopoverContent>
+                                  </Popover>
+                                )}
 
                                 {msgReactions.length > 0 && (
                                   <div className={cn("flex gap-0.5 mt-[-8px]", isOutbound ? "justify-end pr-2" : "pl-2")}>

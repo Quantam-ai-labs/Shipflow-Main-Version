@@ -8575,6 +8575,70 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/support/conversations/:id/messages/:msgId/retry", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const conv = await storage.getConversationById(req.params.id);
+      if (!conv || conv.merchantId !== merchantId) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const allMsgs = await storage.getWaMessages(conv.id);
+      const msg = allMsgs.find(m => m.id === req.params.msgId);
+      if (!msg) return res.status(404).json({ error: "Message not found" });
+      if (msg.status !== "failed") return res.status(400).json({ error: "Message is not in failed state" });
+      if (msg.direction !== "outbound") return res.status(400).json({ error: "Can only retry outbound messages" });
+      if (!msg.text?.trim()) return res.status(400).json({ error: "No text to retry" });
+
+      const [merchantRow] = await db.select({
+        waPhoneNumberId: merchants.waPhoneNumberId,
+        waAccessToken: merchants.waAccessToken,
+      }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
+
+      const phoneNumberId = merchantRow?.waPhoneNumberId;
+      const accessToken = merchantRow?.waAccessToken;
+
+      if (!phoneNumberId || !accessToken) {
+        return res.status(400).json({ error: "WhatsApp credentials not configured" });
+      }
+
+      const waApiUrl = `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`;
+      const waPayload: any = {
+        messaging_product: "whatsapp",
+        to: conv.contactPhone,
+        type: "text",
+        text: { body: msg.text.trim() },
+      };
+
+      try {
+        const waRes = await fetch(waApiUrl, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(waPayload),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (waRes.ok) {
+          const waData = await waRes.json() as any;
+          const waMessageId = waData?.messages?.[0]?.id;
+          await storage.updateWaMessageStatus(msg.id, "sent", waMessageId || undefined);
+          const updatedMsgs = await storage.getWaMessages(conv.id);
+          const updatedMsg = updatedMsgs.find(m => m.id === msg.id);
+          return res.json(updatedMsg);
+        } else {
+          const errBody = await waRes.text().catch(() => "");
+          console.error(`[WhatsApp Retry] Failed (${waRes.status}):`, errBody);
+          await storage.updateWaMessageStatus(msg.id, "failed");
+          return res.status(502).json({ error: "WhatsApp API rejected the message" });
+        }
+      } catch (fetchErr: any) {
+        await storage.updateWaMessageStatus(msg.id, "failed");
+        return res.status(502).json({ error: "Failed to reach WhatsApp API" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   const multerUpload = (await import("multer")).default({ storage: (await import("multer")).default.memoryStorage(), limits: { fileSize: 16 * 1024 * 1024 } });
 
   app.post("/api/support/conversations/:id/media", isAuthenticated, (req: any, res: any, next: any) => {
