@@ -230,8 +230,14 @@ export async function sendOrderStatusWhatsApp(
               metaTemplateBody = metaTemplate.body;
               templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars, automation.variableOrder);
             }
-            if (!templateParams && automation.messageText) {
-              templateParams = extractMessageTextParams(automation.messageText, vars);
+            if (!templateParams && trimmedMsgText) {
+              if (/\{\{\d+\}\}/.test(trimmedMsgText)) {
+                // automation.messageText has positional {{N}} placeholders — treat as template body
+                metaTemplateBody = trimmedMsgText;
+                templateParams = buildTemplateParamsFromBody(trimmedMsgText, vars, automation.variableOrder);
+              } else {
+                templateParams = extractMessageTextParams(trimmedMsgText, vars);
+              }
             }
           }
 

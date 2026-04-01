@@ -7829,17 +7829,23 @@ export async function registerRoutes(
         templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars, retryAutomation?.variableOrder);
       }
       if (!templateParams && retryAutomation?.messageText) {
-        templateParams = extractMessageTextParams(retryAutomation.messageText, vars);
+        const rawMsg = retryAutomation.messageText.trim();
+        if (/\{\{\d+\}\}/.test(rawMsg)) {
+          templateParams = buildTemplateParamsFromBody(rawMsg, vars, retryAutomation?.variableOrder);
+        } else {
+          templateParams = extractMessageTextParams(retryAutomation.messageText, vars);
+        }
       }
 
       const msgText = meta?.messageText || "";
 
       const displayText = (() => {
-        if (metaTemplate?.body && templateParams && templateParams.length > 0) {
-          return metaTemplate.body.replace(/\{\{(\d+)\}\}/g, (_, n) => templateParams[parseInt(n) - 1] ?? `{{${n}}}`);
+        const bodyToUse = metaTemplate?.body ?? (meta?.messageText?.trim() || null);
+        if (bodyToUse && templateParams && templateParams.length > 0) {
+          return bodyToUse.replace(/\{\{(\d+)\}\}/g, (_, n) => templateParams[parseInt(n) - 1] ?? `{{${n}}}`);
         }
         if (msgText) return msgText;
-        if (metaTemplate?.body) return interpolateMessageBody(metaTemplate.body, vars);
+        if (bodyToUse) return interpolateMessageBody(bodyToUse, vars);
         return `[Template: ${templateName}]`;
       })();
 
