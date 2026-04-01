@@ -17921,38 +17921,39 @@ export async function registerRoutes(
             return data.customers || [];
           };
 
-          let searchValue1 = searchValue;
+          let customers: any[] = [];
+
           if (searchField === "phone") {
-            searchValue1 = normalizePakistaniPhone(searchValue);
-          }
-
-          let customers: any[] = await searchForCustomers(searchField, searchValue1);
-
-          if (customers.length === 0 && searchField === "phone") {
-            const digits = searchValue.replace(/\D/g, "");
+            const normalizedPhone = normalizePakistaniPhone(searchValue);
+            const digits = normalizedPhone.replace(/\D/g, "");
+            const withoutPlus = digits;
             const localFormat = digits.startsWith("92") && digits.length === 12
               ? `0${digits.slice(2)}`
               : digits.startsWith("3") && digits.length === 10
               ? `0${digits}`
               : null;
-            if (localFormat) {
-              customers = await searchForCustomers("phone", localFormat);
+            const coreDigits = digits.startsWith("92") && digits.length === 12
+              ? digits.slice(2)
+              : digits.startsWith("0") && digits.length === 11
+              ? digits.slice(1)
+              : null;
+
+            const phoneFormats: string[] = [withoutPlus];
+            if (localFormat) phoneFormats.push(localFormat);
+            if (coreDigits) phoneFormats.push(coreDigits);
+
+            for (const fmt of phoneFormats) {
+              customers = await searchForCustomers("phone", fmt);
+              if (customers.length > 0) break;
             }
+          } else {
+            customers = await searchForCustomers(searchField, searchValue);
           }
 
-          const normalizePhone = (p: string) => p.replace(/\D/g, "");
-          const phoneSuffixMatch = (a: string, b: string) => {
-            const na = normalizePhone(a);
-            const nb = normalizePhone(b);
-            if (na === nb) return true;
-            const minLen = Math.min(na.length, nb.length);
-            const suffixLen = minLen >= 10 ? 10 : 9;
-            return minLen >= suffixLen && na.slice(-suffixLen) === nb.slice(-suffixLen);
-          };
           const normalizeEmail = (e: string) => e.trim().toLowerCase();
           let existingCustomer: any;
           if (searchField === "phone") {
-            existingCustomer = customers[0] || customers.find((c: any) => c.phone && phoneSuffixMatch(c.phone, searchValue as string));
+            existingCustomer = customers[0];
           } else {
             existingCustomer = customers.find((c: any) => c.email && normalizeEmail(c.email) === normalizeEmail(searchValue as string));
           }
