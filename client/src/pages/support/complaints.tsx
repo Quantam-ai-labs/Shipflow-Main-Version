@@ -106,7 +106,6 @@ function StatusBadge({ status }: { status: string }) {
 function replaceTemplatePlaceholders(template: string, complaint: Complaint): string {
   return template
     .replace(/\{\{ticketNumber\}\}/g, complaint.ticketNumber)
-    .replace(/\{\{customerName\}\}/g, complaint.customerName || "Customer")
     .replace(/\{\{orderNumber\}\}/g, complaint.orderNumber || "N/A")
     .replace(/\{\{status\}\}/g, STATUS_CONFIG[complaint.status]?.label || complaint.status);
 }
@@ -158,8 +157,9 @@ export default function SupportComplaintsPage() {
       setStatusChangeTarget(null);
       setNotifyMessage("");
     },
-    onError: () => {
-      toast({ title: "Failed to send notification", variant: "destructive" });
+    onError: (error: any) => {
+      const message = error?.message || "Failed to send notification";
+      toast({ title: "Failed to send notification", description: message, variant: "destructive" });
     },
   });
 

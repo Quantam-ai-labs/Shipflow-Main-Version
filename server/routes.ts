@@ -6091,7 +6091,7 @@ export async function registerRoutes(
         merchant.waAccessToken,
       );
 
-      if (sent) {
+      if (sent.success) {
         let convId = conversationId;
         if (!convId) {
           const conv = await storage.getConversationByPhone(merchantId, customerPhone);
@@ -6217,14 +6217,14 @@ export async function registerRoutes(
     messageText: string,
     merchantPhoneId?: string,
     merchantAccessToken?: string,
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; error?: string }> {
     try {
       const phoneId = merchantPhoneId;
       const accessToken = merchantAccessToken;
 
       if (!phoneId || !accessToken) {
         console.warn(`        ⚠️  Cannot send reply: Merchant WhatsApp not configured`);
-        return false;
+        return { success: false, error: "Merchant WhatsApp not configured" };
       }
 
       // Ensure phone number is in correct format
@@ -6250,14 +6250,15 @@ export async function registerRoutes(
       const data = await response.json();
       if (data.messages?.[0]?.id) {
         console.log(`        ✅ Reply sent to ${formattedPhone}`);
-        return true;
+        return { success: true };
       } else {
-        console.error(`        ❌ Failed to send reply:`, data.error?.message || JSON.stringify(data));
-        return false;
+        const errorMessage = data.error?.message || JSON.stringify(data);
+        console.error(`        ❌ Failed to send reply:`, errorMessage);
+        return { success: false, error: errorMessage };
       }
     } catch (error: any) {
       console.error(`        ❌ Error sending WhatsApp reply:`, error.message);
-      return false;
+      return { success: false, error: error.message };
     }
   }
   // ─────────────────────────────────────────────────────────────────────────
@@ -17597,9 +17598,12 @@ export async function registerRoutes(
       let deliveryDetails: string | undefined;
       let trackingNumber: string | undefined;
 
+      let resolvedCustomerName = customerName || null;
+
       if (orderId) {
         const order = await storage.getOrderById(merchantId, orderId);
         if (order) {
+          resolvedCustomerName = (order.customerName as string) || resolvedCustomerName;
           if (order.lineItems && Array.isArray(order.lineItems)) {
             productDetails = (order.lineItems as any[]).map((li: any) =>
               `${li.title || li.name}${li.quantity ? ` x${li.quantity}` : ""}${li.price ? ` — PKR ${li.price}` : ""}`
@@ -17619,7 +17623,7 @@ export async function registerRoutes(
         conversationId: conversationId || null,
         orderId: orderId || null,
         orderNumber: orderNumber || null,
-        customerName: customerName || null,
+        customerName: resolvedCustomerName,
         customerPhone: customerPhone || null,
         productDetails: productDetails || null,
         deliveryDetails: deliveryDetails || null,
@@ -17669,14 +17673,23 @@ export async function registerRoutes(
         return res.status(400).json({ error: "WhatsApp not configured" });
       }
 
+      let resolvedName: string = complaint.customerName || "Customer";
+      if (complaint.orderId) {
+        const order = await storage.getOrderById(merchantId, complaint.orderId);
+        if (order?.customerName) {
+          resolvedName = order.customerName as string;
+        }
+      }
+      const finalMessage = message.replace(/\{\{customerName\}\}/g, resolvedName);
+
       const sent = await sendWhatsAppReply(
         complaint.customerPhone,
-        message,
+        finalMessage,
         merchant.waPhoneNumberId,
         merchant.waAccessToken,
       );
 
-      if (!sent) return res.status(500).json({ error: "Failed to send WhatsApp message" });
+      if (!sent.success) return res.status(500).json({ error: sent.error || "Failed to send WhatsApp message" });
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
