@@ -41,6 +41,10 @@ const presets = [
     getValue: () => ({ from: subDays(new Date(), 1), to: subDays(new Date(), 1) }),
   },
   {
+    label: "Last 7 days",
+    getValue: () => ({ from: subDays(new Date(), 7), to: new Date() }),
+  },
+  {
     label: "Last Week",
     getValue: () => ({
       from: startOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 }),

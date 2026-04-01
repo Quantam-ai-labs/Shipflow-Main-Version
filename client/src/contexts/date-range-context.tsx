@@ -1,9 +1,15 @@
-import { createContext, useContext, useState, useMemo, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useMemo, useCallback } from "react";
 import { DateRange } from "react-day-picker";
 import { dateRangeToParams, getPresetByLabel, getPresetLabel } from "@/components/date-range-picker";
-import { format, parse, startOfMonth } from "date-fns";
+import { format, parse, subDays } from "date-fns";
 
 const STORAGE_KEY = "shipflow-date-range";
+const DEFAULT_PRESET = "Last 7 days";
+
+function getDefaultRange(): DateRange {
+  const preset = getPresetByLabel(DEFAULT_PRESET);
+  return preset ? preset.getValue() : { from: subDays(new Date(), 7), to: new Date() };
+}
 
 interface DateRangeContextValue {
   dateRange: DateRange | undefined;
@@ -24,9 +30,12 @@ function deserializeRange(stored: string): DateRange | undefined {
   if (!stored) return undefined;
   if (stored.startsWith("preset:")) {
     const label = stored.slice(7);
+    // Migrate stale "Today" default to "Last 7 days"
+    if (label === "Today") return getDefaultRange();
     const preset = getPresetByLabel(label);
     if (preset) return preset.getValue();
-    return { from: startOfMonth(new Date()), to: new Date() };
+    // Unknown preset — fall back to default
+    return getDefaultRange();
   }
   if (stored.startsWith("custom:")) {
     const parts = stored.split(":");
@@ -45,9 +54,12 @@ export function DateRangeProvider({ children }: { children: React.ReactNode }) {
   const [dateRange, setDateRangeState] = useState<DateRange | undefined>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) return deserializeRange(stored);
+      if (stored) {
+        const deserialized = deserializeRange(stored);
+        if (deserialized) return deserialized;
+      }
     } catch {}
-    return { from: startOfMonth(new Date()), to: new Date() };
+    return getDefaultRange();
   });
 
   const setDateRange = useCallback((range: DateRange | undefined) => {
