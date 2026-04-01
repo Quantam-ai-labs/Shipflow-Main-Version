@@ -620,7 +620,7 @@ export default function Pipeline() {
     },
   });
 
-  const { data: integrationsData } = useQuery<{ couriers: Array<{ name: string; isActive: boolean; hasDbCredentials: boolean }> }>({
+  const { data: integrationsData } = useQuery<{ couriers: Array<{ name: string; isActive: boolean; hasDbCredentials: boolean; settings?: Record<string, any> }> }>({
     queryKey: ["/api/integrations"],
   });
 
@@ -1145,7 +1145,11 @@ export default function Pipeline() {
       const checkedIds = new Set<string>(preview.valid.map((v: any) => v.orderId));
       setPreviewChecked(checkedIds);
       setCourierCities(preview.courierCities || []);
-      const defaultMode = selectedCourier === "leopards" ? "Overnight" : "Normal";
+      const leopardsCourierSettings = integrationsData?.couriers?.find(c => c.name === "leopards")?.settings;
+      const leopardsDefaultServiceType = leopardsCourierSettings?.defaultServiceType;
+      const defaultMode = selectedCourier === "leopards"
+        ? (leopardsDefaultServiceType && ["Overnight", "Overland", "Detain"].includes(leopardsDefaultServiceType) ? leopardsDefaultServiceType : "Overnight")
+        : "Normal";
       const overrides: Record<string, {
         weight: number; mode: string; customerName: string; phone: string;
         address: string; city: string; codAmount: number; description: string;

@@ -299,6 +299,8 @@ export async function bookLeopardsPacket(
     shipment_type: mode.toLowerCase() === "detain" ? "Detain" : (mode.toLowerCase() === "overland" ? "Overland" : "Overnight"),
   };
 
+  console.log(`[Leopards] Order ${packet.orderNumber} — shipment_type: ${requestBody.shipment_type} (mode: ${mode})`);
+
   try {
     console.log(`[Leopards] Booking order ${packet.orderNumber}...`);
 

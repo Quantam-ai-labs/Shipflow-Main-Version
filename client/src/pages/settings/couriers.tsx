@@ -19,6 +19,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface IntegrationsData {
   shopify: {
@@ -334,9 +335,17 @@ export default function CouriersSettings() {
     const settingsKeys = config.fields
       .filter(f => f.type !== "password" && f.key !== "accountNumber")
       .map(f => f.key);
-    const settings = Object.fromEntries(
-      settingsKeys.map(k => [k, courierFormData[k] || ""])
-    );
+    const extraSettingsKeys: Record<string, string[]> = {
+      leopards: ["defaultServiceType"],
+    };
+    const allSettingsKeys = [...settingsKeys, ...(extraSettingsKeys[selectedCourier] || [])];
+    const leopardsServiceTypeDefault: Record<string, string> = selectedCourier === "leopards"
+      ? { defaultServiceType: courierFormData.defaultServiceType || "Overnight" }
+      : {};
+    const settings = {
+      ...Object.fromEntries(allSettingsKeys.map(k => [k, courierFormData[k] || ""])),
+      ...leopardsServiceTypeDefault,
+    };
 
     saveCourierMutation.mutate({
       courierName: selectedCourier,
@@ -1270,6 +1279,26 @@ export default function CouriersSettings() {
                   );
                 })}
               </div>
+
+              {selectedCourier === 'leopards' && (
+                <div className="space-y-2">
+                  <Label htmlFor="courier-defaultServiceType">Default Service Type</Label>
+                  <Select
+                    value={courierFormData.defaultServiceType || "Overnight"}
+                    onValueChange={(val) => setCourierFormData(prev => ({ ...prev, defaultServiceType: val }))}
+                  >
+                    <SelectTrigger id="courier-defaultServiceType" data-testid="select-courier-defaultServiceType">
+                      <SelectValue placeholder="Select default service type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Overnight">Overnight</SelectItem>
+                      <SelectItem value="Overland">Overland</SelectItem>
+                      <SelectItem value="Detain">Detain</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Pre-selected service type when opening the booking dialog.</p>
+                </div>
+              )}
 
               {selectedCourier === 'leopards' && (
                 <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">

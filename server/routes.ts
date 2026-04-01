@@ -6823,6 +6823,13 @@ export async function registerRoutes(
         (c) => c.courierName === courierName,
       );
 
+      if (courierName === "leopards" && incomingSettings?.defaultServiceType) {
+        const validServiceTypes = ["Overnight", "Overland", "Detain"];
+        if (!validServiceTypes.includes(incomingSettings.defaultServiceType)) {
+          return res.status(400).json({ message: "Invalid defaultServiceType. Must be Overnight, Overland, or Detain." });
+        }
+      }
+
       const settings: Record<string, any> = {
         useEnvCredentials: !!useEnvCredentials,
         ...incomingSettings,
