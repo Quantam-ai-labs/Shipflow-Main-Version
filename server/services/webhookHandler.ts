@@ -401,15 +401,12 @@ export class WebhookHandler {
               waMaxAttempts: merchants.waMaxAttempts,
               waAttempt2DelayHours: merchants.waAttempt2DelayHours,
             }).from(merchants).where(eq(merchants.id, merchantId)).limit(1);
-            const retriesEnabled = (merchantData?.waMaxAttempts ?? 3) > 1;
             let nextAttempt: Date | null = null;
-            if (retriesEnabled) {
-              if (firstRetryDelayHours != null) {
-                nextAttempt = new Date(Date.now() + firstRetryDelayHours * 60 * 60 * 1000);
-              } else {
-                const delayHours = merchantData?.waAttempt2DelayHours || 4;
-                nextAttempt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
-              }
+            if (firstRetryDelayHours != null) {
+              nextAttempt = new Date(Date.now() + firstRetryDelayHours * 60 * 60 * 1000);
+            } else if ((merchantData?.waMaxAttempts ?? 3) > 1) {
+              const delayHours = merchantData?.waAttempt2DelayHours || 4;
+              nextAttempt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
             }
 
             await db_updateWaSentAt(created.id, 1);

@@ -1,6 +1,6 @@
 import { db, withRetry } from "../db";
 import { orders, merchants, robocallLogs, waAutomations, waConversations, waMessages, waMetaTemplates } from "@shared/schema";
-import { eq, and, isNull, isNotNull, lte, inArray, gte } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, lte, inArray, gte, notInArray } from "drizzle-orm";
 import { logConfirmationEvent } from "./confirmationEngine";
 import { formatPhoneForWhatsApp, sendWhatsAppApiRequest, sendWhatsAppTextMessage } from "../utils/integrations/whatsapp/sender";
 import { interpolateMessageBody, buildVarsFromParams, buildTemplateParamsFromBody } from "../utils/integrations/whatsapp/variables";
@@ -302,7 +302,7 @@ async function checkWaReattempts() {
       itemSummary: orders.itemSummary,
     }).from(orders)
       .where(and(
-        eq(orders.workflowStatus, "NEW"),
+        notInArray(orders.workflowStatus, ["CANCELLED", "DELIVERED", "RETURN"]),
         eq(orders.confirmationStatus, "pending"),
         isNull(orders.waResponseAt),
         eq(orders.waNotOnWhatsApp, false),
@@ -481,7 +481,7 @@ async function checkExhaustedWaOrders() {
       waAutomationId: orders.waAutomationId,
     }).from(orders)
       .where(and(
-        eq(orders.workflowStatus, "NEW"),
+        notInArray(orders.workflowStatus, ["CANCELLED", "DELIVERED", "RETURN"]),
         eq(orders.confirmationStatus, "pending"),
         isNull(orders.waResponseAt),
         isNull(orders.waNextAttemptAt),
@@ -568,8 +568,76 @@ async function checkRobocallsForMerchants() {
   }
 }
 
+async function checkOrphanedConfirmations() {
+  try {
+    const now = new Date();
+
+    const orphaned = await withRetry(() => db.select({
+      id: orders.id,
+      merchantId: orders.merchantId,
+      orderNumber: orders.orderNumber,
+      waAttemptCount: orders.waAttemptCount,
+      waAutomationId: orders.waAutomationId,
+    }).from(orders)
+      .where(and(
+        notInArray(orders.workflowStatus, ["CANCELLED", "DELIVERED", "RETURN"]),
+        eq(orders.confirmationStatus, "pending"),
+        isNotNull(orders.waConfirmationSentAt),
+        isNull(orders.waNextAttemptAt),
+        isNull(orders.waResponseAt),
+        eq(orders.waNotOnWhatsApp, false),
+      )), 'confirmTimer-orphanedConfirmations');
+
+    if (orphaned.length === 0) return;
+
+    const merchantIds = [...new Set(orphaned.map(o => o.merchantId))];
+    const merchantMap = new Map<string, any>();
+    for (const mId of merchantIds) {
+      const [merchant] = await db.select().from(merchants).where(eq(merchants.id, mId)).limit(1);
+      if (merchant) merchantMap.set(mId, merchant);
+    }
+
+    const automationIds = [...new Set(orphaned.map(o => o.waAutomationId).filter(Boolean))] as string[];
+    const automationMap = new Map<string, any>();
+    for (const aId of automationIds) {
+      const [automation] = await db.select().from(waAutomations).where(eq(waAutomations.id, aId)).limit(1);
+      if (automation) automationMap.set(aId, automation);
+    }
+
+    let rescheduled = 0;
+    for (const order of orphaned) {
+      try {
+        const merchant = merchantMap.get(order.merchantId);
+        if (!merchant) continue;
+
+        const automation = order.waAutomationId ? automationMap.get(order.waAutomationId) ?? null : null;
+        const maxAttempts = getMaxAttempts(automation, merchant);
+        const currentAttemptCount = order.waAttemptCount || 0;
+
+        if (currentAttemptCount >= maxAttempts) continue;
+
+        await db.update(orders).set({
+          waNextAttemptAt: new Date(now.getTime() - 1),
+          updatedAt: now,
+        }).where(eq(orders.id, order.id));
+
+        rescheduled++;
+      } catch (err: any) {
+        console.error(`${LOG_PREFIX} Failed to reschedule orphaned order ${order.id}:`, err.message);
+      }
+    }
+
+    if (rescheduled > 0) {
+      console.log(`${LOG_PREFIX} Rescheduled ${rescheduled} orphaned WA confirmation(s) for immediate follow-up`);
+    }
+  } catch (err: any) {
+    console.error(`${LOG_PREFIX} Orphaned confirmation check failed:`, err.message);
+  }
+}
+
 async function checkPendingOrders() {
   try {
+    await checkOrphanedConfirmations();
     await checkWaReattempts();
     await checkExhaustedWaOrders();
     await checkRobocallsForMerchants();
