@@ -22,7 +22,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   ClipboardList,
   Plus,
@@ -108,7 +107,8 @@ function replaceTemplatePlaceholders(template: string, complaint: Complaint): st
   return template
     .replace(/\{\{ticketNumber\}\}/g, complaint.ticketNumber)
     .replace(/\{\{orderNumber\}\}/g, complaint.orderNumber || "N/A")
-    .replace(/\{\{status\}\}/g, STATUS_CONFIG[complaint.status]?.label || complaint.status);
+    .replace(/\{\{status\}\}/g, STATUS_CONFIG[complaint.status]?.label || complaint.status)
+    .replace(/\{\{reason\}\}/g, complaint.reason || "N/A");
 }
 
 export default function SupportComplaintsPage() {
@@ -119,7 +119,6 @@ export default function SupportComplaintsPage() {
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [showTemplatesDialog, setShowTemplatesDialog] = useState(false);
-  const [sendWhatsApp, setSendWhatsApp] = useState(true);
   const [statusChangeTarget, setStatusChangeTarget] = useState<string | null>(null);
   const [notifyMessage, setNotifyMessage] = useState("");
 
@@ -170,17 +169,24 @@ export default function SupportComplaintsPage() {
     },
   });
 
-  const handleStatusChange = async (complaint: Complaint, newStatus: string) => {
+  const handleStatusChange = (complaint: Complaint, newStatus: string) => {
     const template = templates?.find(t => t.status === newStatus);
-    if (sendWhatsApp && complaint.customerPhone && template) {
+    if (complaint.customerPhone) {
       setStatusChangeTarget(newStatus);
-      setNotifyMessage(replaceTemplatePlaceholders(template.messageTemplate, { ...complaint, status: newStatus }));
+      setNotifyMessage(template ? replaceTemplatePlaceholders(template.messageTemplate, { ...complaint, status: newStatus }) : "");
     } else {
       statusMutation.mutate({ id: complaint.id, status: newStatus });
     }
   };
 
-  const confirmStatusChangeWithNotify = async () => {
+  const handleUpdateOnly = async () => {
+    if (!selectedComplaint || !statusChangeTarget) return;
+    await statusMutation.mutateAsync({ id: selectedComplaint.id, status: statusChangeTarget });
+    setStatusChangeTarget(null);
+    setNotifyMessage("");
+  };
+
+  const handleUpdateAndSend = async () => {
     if (!selectedComplaint || !statusChangeTarget) return;
     await statusMutation.mutateAsync({ id: selectedComplaint.id, status: statusChangeTarget });
     if (notifyMessage) {
@@ -313,8 +319,7 @@ export default function SupportComplaintsPage() {
             onStatusChange={handleStatusChange}
             nextStatuses={getNextStatuses(selectedComplaint.status)}
             statusChangePending={statusMutation.isPending}
-            sendWhatsApp={sendWhatsApp}
-            onToggleWhatsApp={setSendWhatsApp}
+            templates={templates || []}
           />
         )}
       </div>
@@ -337,6 +342,7 @@ export default function SupportComplaintsPage() {
                   value={notifyMessage}
                   onChange={e => setNotifyMessage(e.target.value)}
                   rows={4}
+                  placeholder="Type a message or leave blank to skip..."
                   data-testid="textarea-notify-message"
                 />
                 <div className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
@@ -348,8 +354,17 @@ export default function SupportComplaintsPage() {
             <DialogFooter>
               <Button variant="outline" onClick={() => { setStatusChangeTarget(null); setNotifyMessage(""); }}>Cancel</Button>
               <Button
-                onClick={confirmStatusChangeWithNotify}
+                variant="outline"
+                onClick={handleUpdateOnly}
                 disabled={statusMutation.isPending || notifyMutation.isPending}
+                data-testid="button-update-only"
+              >
+                {statusMutation.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+                Update Only
+              </Button>
+              <Button
+                onClick={handleUpdateAndSend}
+                disabled={statusMutation.isPending || notifyMutation.isPending || !notifyMessage.trim()}
                 data-testid="button-confirm-status-notify"
               >
                 {(statusMutation.isPending || notifyMutation.isPending) && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
@@ -384,20 +399,46 @@ function ComplaintDetailPanel({
   onStatusChange,
   nextStatuses,
   statusChangePending,
-  sendWhatsApp,
-  onToggleWhatsApp,
+  templates,
 }: {
   complaint: Complaint;
   onClose: () => void;
   onStatusChange: (complaint: Complaint, newStatus: string) => void;
   nextStatuses: string[];
   statusChangePending: boolean;
-  sendWhatsApp: boolean;
-  onToggleWhatsApp: (v: boolean) => void;
+  templates: ComplaintTemplate[];
 }) {
+  const { toast } = useToast();
   const history = Array.isArray(complaint.statusHistory) ? complaint.statusHistory : [];
+  const [showFiledNotify, setShowFiledNotify] = useState(false);
+  const [filedMessage, setFiledMessage] = useState("");
+
+  const sendFiledNotifyMutation = useMutation({
+    mutationFn: async ({ id, message }: { id: string; message: string }) => {
+      const res = await apiRequest("POST", `/api/support/complaints/${id}/notify`, { message });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "WhatsApp notification sent" });
+      setShowFiledNotify(false);
+      setFiledMessage("");
+    },
+    onError: () => {
+      toast({ title: "Failed to send notification", variant: "destructive" });
+    },
+  });
+
+  const openFiledNotify = () => {
+    const loggedTemplate = templates.find(t => t.status === "logged");
+    const prefilled = loggedTemplate
+      ? replaceTemplatePlaceholders(loggedTemplate.messageTemplate, complaint)
+      : `Hi! Your complaint has been logged. Ticket: ${complaint.ticketNumber}. Our team will review it shortly.`;
+    setFiledMessage(prefilled);
+    setShowFiledNotify(true);
+  };
 
   return (
+    <>
     <div className="w-[380px] border-l bg-background flex flex-col shrink-0">
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <div>
@@ -456,6 +497,21 @@ function ComplaintDetailPanel({
             </Section>
           )}
 
+          {complaint.customerPhone && (
+            <Section title="Notify Customer">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start gap-2 text-xs"
+                onClick={openFiledNotify}
+                data-testid="button-send-filed-notification"
+              >
+                <Send className="w-3 h-3" />
+                Send Complaint Filed Notification
+              </Button>
+            </Section>
+          )}
+
           {history.length > 0 && (
             <Section title="Status Timeline">
               <div className="space-y-2">
@@ -476,10 +532,6 @@ function ComplaintDetailPanel({
 
           {nextStatuses.length > 0 && (
             <Section title="Update Status">
-              <div className="flex items-center gap-2 mb-3">
-                <Switch checked={sendWhatsApp} onCheckedChange={onToggleWhatsApp} id="wa-toggle" data-testid="switch-send-whatsapp" />
-                <Label htmlFor="wa-toggle" className="text-xs">Send WhatsApp Update</Label>
-              </div>
               <div className="space-y-1.5">
                 {nextStatuses.map(s => (
                   <Button
@@ -511,6 +563,48 @@ function ComplaintDetailPanel({
         </div>
       </ScrollArea>
     </div>
+
+    {showFiledNotify && (
+      <Dialog open onOpenChange={(open) => { if (!open) { setShowFiledNotify(false); setFiledMessage(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Complaint Filed Notification</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Sending to:</span>
+              <span className="font-mono font-medium text-foreground">{complaint.customerPhone}</span>
+            </div>
+            <div className="space-y-2">
+              <Label>WhatsApp Message</Label>
+              <Textarea
+                value={filedMessage}
+                onChange={e => setFiledMessage(e.target.value)}
+                rows={4}
+                data-testid="textarea-filed-notify-message"
+              />
+              <div className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+                <Info className="w-3 h-3 shrink-0 mt-0.5" />
+                <span>Sends as plain text — only delivered if the customer messaged in the last 24 hours</span>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowFiledNotify(false); setFiledMessage(""); }}>Cancel</Button>
+            <Button
+              onClick={() => sendFiledNotifyMutation.mutate({ id: complaint.id, message: filedMessage })}
+              disabled={sendFiledNotifyMutation.isPending || !filedMessage.trim()}
+              data-testid="button-send-filed-notify-confirm"
+            >
+              {sendFiledNotifyMutation.isPending && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+              <Send className="w-4 h-4 mr-1" />
+              Send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   );
 }
 
@@ -758,7 +852,12 @@ function TemplatesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
               return (
                 <div key={status} className="border rounded-lg p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <StatusBadge status={status} />
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={status} />
+                      {status === "logged" && (
+                        <span className="text-[10px] text-muted-foreground">— Filing notification</span>
+                      )}
+                    </div>
                     {!isEditing && (
                       <Button
                         variant="ghost"
@@ -779,7 +878,7 @@ function TemplatesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                         data-testid={`textarea-template-${status}`}
                       />
                       <p className="text-[10px] text-muted-foreground">
-                        Placeholders: {"{{customerName}}"}, {"{{ticketNumber}}"}, {"{{orderNumber}}"}, {"{{status}}"}
+                        Placeholders: {"{{customerName}}"}, {"{{ticketNumber}}"}, {"{{orderNumber}}"}, {"{{status}}"}, {"{{reason}}"}
                       </p>
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => saveMutation.mutate({ status, messageTemplate: editValue })} disabled={saveMutation.isPending} data-testid={`button-save-template-${status}`}>
