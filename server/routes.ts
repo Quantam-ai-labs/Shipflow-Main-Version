@@ -17825,12 +17825,23 @@ export async function registerRoutes(
     try {
       const merchantId = await requireMerchant(req, res);
       if (!merchantId) return;
-      const { firstName, lastName, email, phone, address, city } = req.body;
+      const { firstName, lastName, email, phone: rawPhone, address, city } = req.body;
       const store = await storage.getShopifyStore(merchantId);
       if (!store?.accessToken || !store.shopDomain || !store.isConnected) {
         return res.status(400).json({ error: "Shopify not connected" });
       }
       const accessToken = decryptToken(store.accessToken);
+
+      const normalizePakistaniPhone = (p: string): string => {
+        const digits = p.replace(/\D/g, "");
+        if (digits.startsWith("92") && digits.length === 12) return `+${digits}`;
+        if (digits.startsWith("0") && digits.length === 11) return `+92${digits.slice(1)}`;
+        if (digits.startsWith("3") && digits.length === 10) return `+92${digits}`;
+        return p;
+      };
+
+      const phone = rawPhone ? normalizePakistaniPhone(rawPhone) : rawPhone;
+
       const customerPayload: any = {
         customer: {
           first_name: firstName || "",
@@ -17895,16 +17906,40 @@ export async function registerRoutes(
             const errMsg = JSON.stringify(parsed.errors);
             return res.status(400).json({ error: `Shopify error: ${errMsg}` });
           }
-          const qualifiedQuery = `${searchField}:"${searchValue}"`;
-          const searchUrl = `https://${store.shopDomain}/admin/api/2025-01/customers/search.json?query=${encodeURIComponent(qualifiedQuery)}&limit=5&fields=id,first_name,last_name,phone,email,default_address`;
-          const searchResponse = await fetch(searchUrl, {
-            headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
-          });
-          if (!searchResponse.ok) {
-            const errMsg = JSON.stringify(parsed.errors);
-            return res.status(400).json({ error: `Shopify error: ${errMsg}` });
+
+          const searchForCustomers = async (field: string, value: string): Promise<any[]> => {
+            const qualifiedQuery = `${field}:"${value}"`;
+            const searchUrl = `https://${store.shopDomain}/admin/api/2025-01/customers/search.json?query=${encodeURIComponent(qualifiedQuery)}&limit=5&fields=id,first_name,last_name,phone,email,default_address`;
+            const resp = await fetch(searchUrl, {
+              headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
+            });
+            if (!resp.ok) {
+              console.warn(`[Shopify] Customer search failed for ${field}:"${value}" — status ${resp.status}`);
+              return [];
+            }
+            const data = await resp.json();
+            return data.customers || [];
+          };
+
+          let searchValue1 = searchValue;
+          if (searchField === "phone") {
+            searchValue1 = normalizePakistaniPhone(searchValue);
           }
-          const searchData = await searchResponse.json();
+
+          let customers: any[] = await searchForCustomers(searchField, searchValue1);
+
+          if (customers.length === 0 && searchField === "phone") {
+            const digits = searchValue.replace(/\D/g, "");
+            const localFormat = digits.startsWith("92") && digits.length === 12
+              ? `0${digits.slice(2)}`
+              : digits.startsWith("3") && digits.length === 10
+              ? `0${digits}`
+              : null;
+            if (localFormat) {
+              customers = await searchForCustomers("phone", localFormat);
+            }
+          }
+
           const normalizePhone = (p: string) => p.replace(/\D/g, "");
           const phoneSuffixMatch = (a: string, b: string) => {
             const na = normalizePhone(a);
@@ -17915,7 +17950,6 @@ export async function registerRoutes(
             return minLen >= suffixLen && na.slice(-suffixLen) === nb.slice(-suffixLen);
           };
           const normalizeEmail = (e: string) => e.trim().toLowerCase();
-          const customers: any[] = searchData.customers || [];
           let existingCustomer: any;
           if (searchField === "phone") {
             existingCustomer = customers[0] || customers.find((c: any) => c.phone && phoneSuffixMatch(c.phone, searchValue as string));
