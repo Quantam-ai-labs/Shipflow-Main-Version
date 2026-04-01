@@ -3243,7 +3243,7 @@ export default function SupportChatPage() {
                   )}
                 </div>
 
-                {/* Template preview + variable inputs */}
+                {/* Template preview + send options */}
                 <div className="w-1/2 overflow-y-auto p-3 flex flex-col gap-3">
                   {selectedTemplate ? (() => {
                     const bodyVarNums = [...new Set(Array.from(selectedTemplate.body?.matchAll(/\{\{(\d+)\}\}/g) || []).map(m => m[1]))].sort();
@@ -3272,32 +3272,8 @@ export default function SupportChatPage() {
                             </div>
                           )}
                         </div>
-                        {bodyVarNums.length > 0 && (
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Fill Variables</p>
-                              {orderVars && <span className="text-[10px] text-[#008069] font-medium">Auto-filled from order</span>}
-                            </div>
-                            {bodyVarNums.map(n => {
-                              const varKey = TEMPLATE_VAR_ORDER[parseInt(n) - 1];
-                              const label = varKey ? TEMPLATE_VAR_LABELS[varKey] || varKey : `Variable ${n}`;
-                              return (
-                                <div key={n}>
-                                  <label className="text-xs text-muted-foreground mb-0.5 block">
-                                    <span className="font-mono">{`{{${n}}}`}</span>
-                                    {varKey && <span className="ml-1 text-muted-foreground/70">— {label}</span>}
-                                  </label>
-                                  <Input
-                                    placeholder={label}
-                                    value={templateVars[n] || ""}
-                                    onChange={(e) => setTemplateVars(prev => ({ ...prev, [n]: e.target.value }))}
-                                    className="h-7 text-xs"
-                                    data-testid={`input-template-var-${n}`}
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
+                        {orderVars && bodyVarNums.length > 0 && (
+                          <p className="text-[10px] text-[#008069] font-medium">Variables auto-filled from order</p>
                         )}
                         <div className="flex flex-col gap-2">
                           <Button
@@ -3337,8 +3313,40 @@ export default function SupportChatPage() {
                             ) : (
                               <Send className="w-4 h-4 mr-2" />
                             )}
-                            Send Now
+                            Send as Template
                           </Button>
+                          <div className="flex flex-col gap-1">
+                            <Button
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => {
+                                if (selectedConvId && resolvedBody.trim()) {
+                                  sendMutation.mutate({ text: resolvedBody.trim() }, {
+                                    onSuccess: () => {
+                                      setTemplatePickerOpen(false);
+                                      setSelectedTemplate(null);
+                                      setTemplateSearch("");
+                                      setTemplateVars({});
+                                      toast({ title: "Message sent" });
+                                    },
+                                  });
+                                }
+                              }}
+                              disabled={sendMutation.isPending || !resolvedBody.trim()}
+                              data-testid="button-send-template-as-plaintext"
+                            >
+                              {sendMutation.isPending ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              ) : (
+                                <Send className="w-4 h-4 mr-2" />
+                              )}
+                              Send as Plain Text
+                            </Button>
+                            <div className="flex items-start gap-1.5 text-[10px] text-muted-foreground">
+                              <Info className="w-3 h-3 shrink-0 mt-0.5" />
+                              <span>Plain text only works within the customer's 24-hour messaging window</span>
+                            </div>
+                          </div>
                         </div>
                       </>
                     );
