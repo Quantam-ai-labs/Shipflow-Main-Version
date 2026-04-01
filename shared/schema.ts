@@ -299,6 +299,7 @@ export const orders = pgTable("orders", {
   waResponsePayload: jsonb("wa_response_payload"),
   roboResponseAt: timestamp("robo_response_at"),
   conflictDetected: boolean("conflict_detected").default(false),
+  conflictClarificationState: varchar("conflict_clarification_state", { length: 30 }),
   confirmationResponseCount: integer("confirmation_response_count").default(0),
   waAttemptCount: integer("wa_attempt_count").default(0),
   waNextAttemptAt: timestamp("wa_next_attempt_at"),
