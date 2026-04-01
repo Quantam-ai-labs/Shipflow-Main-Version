@@ -7905,13 +7905,19 @@ export async function registerRoutes(
           templateParams = buildTemplateParamsFromBody(metaTemplate.body, vars) ?? undefined;
         }
 
-        const msgText = "";
+        const displayText = (() => {
+          if (metaTemplate?.body && templateParams && templateParams.length > 0) {
+            return metaTemplate.body.replace(/\{\{(\d+)\}\}/g, (_, n) => templateParams![parseInt(n) - 1] ?? `{{${n}}}`);
+          }
+          if (metaTemplate?.body) return metaTemplate.body;
+          return `[Template: ${templateName}]`;
+        })();
 
         try {
           const result = await sendWhatsAppApiRequest({
             formattedPhone,
             templateName,
-            messageText: msgText,
+            messageText: "",
             orderNumber: order.orderNumber || "",
             templateParams,
             phoneNumberId: merchantRow.waPhoneNumberId ?? undefined,
@@ -7929,7 +7935,7 @@ export async function registerRoutes(
               success: result.success,
               phone: formattedPhone,
               templateName,
-              messageText: msgText,
+              messageText: displayText,
               messageId: result.messageId,
               error: result.error,
               bulkAction: true,
@@ -7945,13 +7951,13 @@ export async function registerRoutes(
                 contactName: order.customerName || undefined,
                 orderId: order.id,
                 orderNumber: order.orderNumber || undefined,
-                lastMessage: msgText.slice(0, 200),
+                lastMessage: displayText.slice(0, 200),
               });
               await storage.createWaMessage({
                 conversationId: conv.id,
                 direction: "outbound",
                 senderName: "User (Bulk)",
-                text: msgText,
+                text: displayText,
                 waMessageId: result.messageId,
                 status: "sent",
               });
