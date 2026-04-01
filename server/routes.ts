@@ -2126,7 +2126,7 @@ export async function registerRoutes(
 
         const reopenResult = await reopenShopifyOrder(
           store.shopDomain,
-          store.accessToken,
+          decryptToken(store.accessToken),
           order.shopifyOrderId,
         );
 
