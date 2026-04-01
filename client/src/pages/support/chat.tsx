@@ -3153,7 +3153,7 @@ export default function SupportChatPage() {
             {/* Mode tabs */}
             <div className="flex -mx-4">
               <button
-                onClick={() => setActiveDialogTab('template')}
+                onClick={() => { setActiveDialogTab('template'); setPlainTextMessage(""); }}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors flex-1 justify-center",
                   activeDialogTab === 'template'
@@ -3166,7 +3166,7 @@ export default function SupportChatPage() {
                 Template
               </button>
               <button
-                onClick={() => setActiveDialogTab('plaintext')}
+                onClick={() => { setActiveDialogTab('plaintext'); setSelectedTemplate(null); setTemplateSearch(""); setTemplateVars({}); }}
                 className={cn(
                   "flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors flex-1 justify-center",
                   activeDialogTab === 'plaintext'
