@@ -109,8 +109,10 @@ async function sendWaReminderViaTemplate(
           shippingAddress: order.shippingAddress,
         });
         const params = metaTpl?.body ? buildTemplateParamsFromBody(metaTpl.body, vars) : null;
-        const displayText = metaTpl?.body && params?.length
-          ? metaTpl.body.replace(/\{\{(\d+)\}\}/g, (_, n: string) => params[parseInt(n) - 1] ?? `{{${n}}}`)
+        const displayText = metaTpl?.body
+          ? (params?.length
+            ? metaTpl.body.replace(/\{\{(\d+)\}\}/g, (_, n: string) => params[parseInt(n) - 1] ?? `{{${n}}}`)
+            : metaTpl.body)
           : `[Template: ${templateName}]`;
         const conv = await storage.upsertConversation({
           merchantId: order.merchantId,
