@@ -737,13 +737,6 @@ export class ShopifyService {
         
         if (!hasCourierStatus && !isInManagedWorkflow) {
           updateData.shipmentStatus = transformedOrder.shipmentStatus;
-          updateData.courierName = transformedOrder.courierName;
-          updateData.courierTracking = transformedOrder.courierTracking;
-        }
-
-        if (!hasCourierStatus && transformedOrder.courierTracking) {
-          updateData.courierTracking = transformedOrder.courierTracking;
-          updateData.courierName = transformedOrder.courierName;
         }
 
         pendingUpdates.push({
@@ -927,10 +920,6 @@ export class ShopifyService {
                   bookingStatus: 'BOOKED',
                   bookedAt: existingOrder.bookedAt || now,
                 };
-                if (transformedOrder.courierTracking && !existingOrder.courierTracking) {
-                  bookedFields.courierTracking = transformedOrder.courierTracking;
-                  bookedFields.courierName = transformedOrder.courierName || existingOrder.courierName;
-                }
                 await storage.updateOrder(merchantId, existingOrderId, bookedFields);
 
                 await transitionOrder({
@@ -1124,38 +1113,6 @@ export class ShopifyService {
       fullAddress = noteAddress.trim();
     }
 
-    let courierName: string | null = null;
-    let courierTracking: string | null = null;
-    
-    if (shopifyOrder.note_attributes && Array.isArray(shopifyOrder.note_attributes)) {
-      for (const attr of shopifyOrder.note_attributes) {
-        if (attr.name === 'hxs_courier_name') {
-          courierName = attr.value;
-        } else if (attr.name === 'hxs_courier_tracking') {
-          courierTracking = attr.value;
-        }
-      }
-    }
-
-    if (!courierTracking && shopifyOrder.fulfillments && Array.isArray(shopifyOrder.fulfillments)) {
-      for (const fulfillment of shopifyOrder.fulfillments) {
-        if (fulfillment.tracking_number && fulfillment.status === 'success') {
-          courierTracking = fulfillment.tracking_number;
-          const company = (fulfillment.tracking_company || '').toLowerCase();
-          if (company.includes('leopard')) {
-            courierName = 'Leopards';
-          } else if (company.includes('postex') || company.includes('post ex')) {
-            courierName = 'PostEx';
-          } else if (company.includes('tcs')) {
-            courierName = 'TCS';
-          } else if (fulfillment.tracking_company) {
-            courierName = fulfillment.tracking_company;
-          }
-          break;
-        }
-      }
-    }
-
     const totalQuantity = shopifyOrder.line_items.reduce((sum, item) => sum + item.quantity, 0);
 
     const itemSummary = shopifyOrder.line_items
@@ -1193,8 +1150,6 @@ export class ShopifyService {
     let shipmentStatus = 'Unfulfilled';
     if (shopifyOrder.cancelled_at) {
       shipmentStatus = 'CANCELLED';
-    } else if (courierTracking) {
-      shipmentStatus = 'BOOKED';
     }
 
     return {
@@ -1214,8 +1169,8 @@ export class ShopifyService {
       discountAmount: shopifyOrder.total_discounts,
       currency: shopifyOrder.currency,
       paymentMethod: isCod ? 'cod' : 'prepaid',
-      courierName,
-      courierTracking,
+      courierName: null,
+      courierTracking: null,
       totalQuantity,
       itemSummary,
       paymentStatus,

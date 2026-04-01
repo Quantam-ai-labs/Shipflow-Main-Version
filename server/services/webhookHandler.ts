@@ -548,14 +548,9 @@ export class WebhookHandler {
         shipmentStatus = 'DELIVERY_FAILED';
       }
 
-      const trackingNumber = payload.tracking_number || payload.tracking_numbers?.[0] || null;
-      const trackingCompany = payload.tracking_company || null;
-
       await storage.updateOrder(merchantId, existingOrder.id, {
         fulfillmentStatus: fulfillmentStatus === 'success' ? 'fulfilled' : fulfillmentStatus,
         shipmentStatus,
-        courierTracking: trackingNumber || existingOrder.courierTracking,
-        courierName: trackingCompany || existingOrder.courierName,
         lastWebhookAt: new Date(),
       });
 

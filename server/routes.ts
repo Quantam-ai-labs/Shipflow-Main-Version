@@ -15509,6 +15509,92 @@ export async function registerRoutes(
   });
 
   // ============================================
+  // ONE-TIME DATA FIX: HxS tracking contamination (Task #145)
+  // Corrects 4 production orders that had wrong courier_tracking
+  // imported from HxS note_attributes. Safe to run multiple times (idempotent).
+  // ============================================
+
+  app.post("/api/admin/fix-hxs-tracking-contamination", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const LALA_IMPORT_MERCHANT_ID = "63d76766-32d7-47ab-8b46-d3c479bcb58a";
+      const results: any[] = [];
+
+      // #26770 — customer cancelled via WhatsApp within minutes; tracking was from
+      // a December 2025 order via HxS note_attributes contamination.
+      // Correct action: clear courier fields, reset to CANCELLED.
+      const fix26770 = await db.execute(sql`
+        UPDATE orders SET
+          courier_tracking = NULL,
+          courier_name = NULL,
+          shipment_status = NULL,
+          courier_raw_status = NULL,
+          delivered_at = NULL,
+          workflow_status = 'CANCELLED',
+          updated_at = NOW()
+        WHERE merchant_id = ${LALA_IMPORT_MERCHANT_ID}
+          AND order_number = '#26770'
+          AND courier_tracking = 'PW7513447528'
+        RETURNING id, order_number, workflow_status, courier_tracking
+      `);
+      results.push({ order: "#26770", rows: fix26770.rows, action: "clear_tracking_reset_to_cancelled" });
+
+      // #24946 — HxS contamination set PW7527290180; real tracking is PW7513515728
+      const fix24946 = await db.execute(sql`
+        UPDATE orders SET
+          courier_tracking = 'PW7513515728',
+          updated_at = NOW()
+        WHERE merchant_id = ${LALA_IMPORT_MERCHANT_ID}
+          AND order_number = '#24946'
+          AND courier_tracking = 'PW7527290180'
+        RETURNING id, order_number, courier_tracking
+      `);
+      results.push({ order: "#24946", rows: fix24946.rows, action: "set_correct_tracking" });
+
+      // #25155 — HxS contamination set PW7527296430; real tracking is PW7513519814
+      const fix25155 = await db.execute(sql`
+        UPDATE orders SET
+          courier_tracking = 'PW7513519814',
+          updated_at = NOW()
+        WHERE merchant_id = ${LALA_IMPORT_MERCHANT_ID}
+          AND order_number = '#25155'
+          AND courier_tracking = 'PW7527296430'
+        RETURNING id, order_number, courier_tracking
+      `);
+      results.push({ order: "#25155", rows: fix25155.rows, action: "set_correct_tracking" });
+
+      // #25465 — HxS contamination set PW7513516614; real tracking is PW7513524758
+      const fix25465 = await db.execute(sql`
+        UPDATE orders SET
+          courier_tracking = 'PW7513524758',
+          updated_at = NOW()
+        WHERE merchant_id = ${LALA_IMPORT_MERCHANT_ID}
+          AND order_number = '#25465'
+          AND courier_tracking = 'PW7513516614'
+        RETURNING id, order_number, courier_tracking
+      `);
+      results.push({ order: "#25465", rows: fix25465.rows, action: "set_correct_tracking" });
+
+      const totalFixed = results.reduce((sum, r) => sum + r.rows.length, 0);
+      console.log(`[Admin] HxS tracking fix applied by ${adminId}: ${totalFixed} orders updated`);
+
+      res.json({
+        success: true,
+        totalFixed,
+        results,
+        message: totalFixed === 0
+          ? "No rows matched — fix may have already been applied or tracking values differ from expected"
+          : `Fixed ${totalFixed} order(s)`,
+      });
+    } catch (error: any) {
+      console.error("[Admin] HxS tracking fix failed:", error);
+      res.status(500).json({ message: "Fix failed", error: error.message });
+    }
+  });
+
+  // ============================================
   // BULK CANCELLATION JOB ENDPOINTS
   // ============================================
 
