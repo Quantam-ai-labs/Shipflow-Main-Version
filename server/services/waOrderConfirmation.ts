@@ -48,6 +48,47 @@ function classifyMessage(lowerMessage: string): "confirm" | "cancel" | "query" {
   return "query";
 }
 
+async function saveOutboundMessage(
+  merchantId: string,
+  phone: string,
+  text: string,
+  opts?: { orderId?: string | null; orderNumber?: string | null; contactName?: string | null }
+): Promise<void> {
+  try {
+    const conv = await storage.upsertConversation({
+      merchantId,
+      contactPhone: phone,
+      contactName: opts?.contactName ?? undefined,
+      orderId: opts?.orderId ?? null,
+      orderNumber: opts?.orderNumber ?? null,
+      lastMessage: text.slice(0, 200),
+    });
+    await storage.createWaMessage({
+      conversationId: conv.id,
+      direction: "outbound",
+      senderName: "System",
+      text,
+      status: "sent",
+    });
+  } catch (e: any) {
+    console.warn(`${LOG} Failed to save outbound message to chat:`, e.message);
+  }
+}
+
+async function sendAndSave(
+  phone: string,
+  text: string,
+  merchantId: string,
+  replyPhoneId: string | undefined,
+  replyAccessToken: string | undefined,
+  opts?: { orderId?: string | null; orderNumber?: string | null; contactName?: string | null }
+): Promise<void> {
+  const sent = await sendWhatsAppMessage(phone, text, replyPhoneId, replyAccessToken);
+  if (sent) {
+    await saveOutboundMessage(merchantId, phone, text, opts);
+  }
+}
+
 // ── Conflict resolution sub-flow ──────────────────────────────────────────────
 async function handleConflictClarificationReply(
   merchantId: string,
@@ -61,6 +102,7 @@ async function handleConflictClarificationReply(
   replyAccessToken?: string,
 ): Promise<void> {
   const now = new Date();
+  const saveOpts = { orderId, orderNumber };
 
   if (conflictState === "awaiting_clarification") {
     if (action === "confirm") {
@@ -85,9 +127,9 @@ async function handleConflictClarificationReply(
         console.error(`${LOG} ⚠️ transitionOrder READY_TO_SHIP failed for #${orderNumber}: ${transitionResult1.error}`);
       }
 
-      await sendWhatsAppMessage(normalizedPhone,
+      await sendAndSave(normalizedPhone,
         `✅ Thank you! Your order #${orderNumber} has been confirmed and will be processed shortly.`,
-        replyPhoneId, replyAccessToken);
+        merchantId, replyPhoneId, replyAccessToken, saveOpts);
 
       console.log(`${LOG} ✅ Conflict resolved — Order #${orderNumber} confirmed after clarification`);
 
@@ -99,9 +141,9 @@ async function handleConflictClarificationReply(
         updatedAt: now,
       }).where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
 
-      await sendWhatsAppMessage(normalizedPhone,
+      await sendAndSave(normalizedPhone,
         `Thank you for letting us know. Could you please briefly tell us why you'd like to cancel order #${orderNumber}? Your feedback helps us improve.`,
-        replyPhoneId, replyAccessToken);
+        merchantId, replyPhoneId, replyAccessToken, saveOpts);
 
       console.log(`${LOG} Conflict → awaiting cancel reason for order #${orderNumber}`);
 
@@ -113,9 +155,9 @@ async function handleConflictClarificationReply(
         updatedAt: now,
       }).where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
 
-      await sendWhatsAppMessage(normalizedPhone,
+      await sendAndSave(normalizedPhone,
         `We've received your message regarding order #${orderNumber}. Our team will follow up with you shortly to resolve this.`,
-        replyPhoneId, replyAccessToken);
+        merchantId, replyPhoneId, replyAccessToken, saveOpts);
 
       await createNotification({
         merchantId,
@@ -152,9 +194,9 @@ async function handleConflictClarificationReply(
         console.error(`${LOG} ⚠️ transitionOrder READY_TO_SHIP failed for #${orderNumber}: ${transitionResult2.error}`);
       }
 
-      await sendWhatsAppMessage(normalizedPhone,
+      await sendAndSave(normalizedPhone,
         `✅ Got it! Your order #${orderNumber} has been confirmed and will be processed shortly.`,
-        replyPhoneId, replyAccessToken);
+        merchantId, replyPhoneId, replyAccessToken, saveOpts);
 
       console.log(`${LOG} ✅ Order #${orderNumber} confirmed after cancel-reason stage`);
 
@@ -183,9 +225,9 @@ async function handleConflictClarificationReply(
         console.error(`${LOG} ⚠️ transitionOrder CANCELLED failed for #${orderNumber}: ${transitionResult3.error}`);
       }
 
-      await sendWhatsAppMessage(normalizedPhone,
+      await sendAndSave(normalizedPhone,
         `We've noted your cancellation for order #${orderNumber}. Thank you for letting us know — we've recorded your reason. If you change your mind or need assistance, please feel free to reach out.`,
-        replyPhoneId, replyAccessToken);
+        merchantId, replyPhoneId, replyAccessToken, saveOpts);
 
       console.log(`${LOG} Order #${orderNumber} cancelled after conflict clarification. Reason: "${cancelReason}"`);
     }
@@ -219,6 +261,7 @@ export async function processWhatsAppOrderResponse(
 
     const orderForStatus: Order | undefined = await storage.getOrderById(merchantId, orderId);
     const conflictState = orderForStatus?.conflictClarificationState;
+    const saveOpts = { orderId, orderNumber };
 
     // ── 1. In-progress conflict clarification ─────────────────────────────────
     if (conflictState === "awaiting_clarification" || conflictState === "awaiting_cancel_reason") {
@@ -280,9 +323,9 @@ export async function processWhatsAppOrderResponse(
         const isConfirmedStatus = previousStatus === "confirmed" || previousStatus === "manual_confirmed";
         const prevWord = isConfirmedStatus ? "Confirm" : "Cancel";
         const newWord = action === "confirm" ? "Confirm" : "Cancel";
-        await sendWhatsAppMessage(normalizedPhone,
+        await sendAndSave(normalizedPhone,
           `Hi! We noticed you pressed both *${prevWord}* and *${newWord}* for order #${orderNumber}.\n\nTo finalize — please reply:\n• *Confirm* — to proceed with your order\n• *Cancel* — to cancel (and share the reason)\n\nThank you for your time! 🙏`,
-          replyPhoneId, replyAccessToken);
+          merchantId, replyPhoneId, replyAccessToken, saveOpts);
 
         await logConfirmationEvent({
           merchantId, orderId,
@@ -306,9 +349,9 @@ export async function processWhatsAppOrderResponse(
           console.error(`${LOG} Error in post-confirm AI reply:`, e.message)
         );
       } else {
-        await sendWhatsAppMessage(normalizedPhone,
+        await sendAndSave(normalizedPhone,
           `Thank you for your message regarding order #${orderNumber}. Our team will get back to you shortly.`,
-          replyPhoneId, replyAccessToken);
+          merchantId, replyPhoneId, replyAccessToken, saveOpts);
       }
       return;
     }
@@ -329,9 +372,9 @@ export async function processWhatsAppOrderResponse(
       if (action === "confirm") {
         console.log(`${LOG} ✅ Order #${orderNumber} confirmed via WhatsApp — silent confirmation`);
       } else if (action === "cancel") {
-        await sendWhatsAppMessage(normalizedPhone,
+        await sendAndSave(normalizedPhone,
           `We've noted your cancellation for order #${orderNumber}. Could you briefly share why you'd like to cancel? Your feedback helps us improve.`,
-          replyPhoneId, replyAccessToken);
+          merchantId, replyPhoneId, replyAccessToken, saveOpts);
       } else {
         const aiMerchant = await storage.getMerchant(merchantId);
         if (aiMerchant?.aiAutoReplyEnabled) {
@@ -341,9 +384,9 @@ export async function processWhatsAppOrderResponse(
             console.error(`${LOG} Error in order-query AI reply:`, e.message)
           );
         } else {
-          await sendWhatsAppMessage(normalizedPhone,
+          await sendAndSave(normalizedPhone,
             `Thank you for your message regarding order #${orderNumber}. Our team will get back to you shortly.\n\nTo confirm, reply *Yes*. To cancel, reply *No*.`,
-            replyPhoneId, replyAccessToken);
+            merchantId, replyPhoneId, replyAccessToken, saveOpts);
         }
       }
     } else if (result.locked) {
@@ -355,15 +398,15 @@ export async function processWhatsAppOrderResponse(
           console.error(`${LOG} Error in post-booking AI reply:`, e.message)
         );
       } else {
-        await sendWhatsAppMessage(normalizedPhone,
+        await sendAndSave(normalizedPhone,
           `Order #${orderNumber} has already been confirmed and is being processed. For any changes, please contact our support team.`,
-          replyPhoneId, replyAccessToken);
+          merchantId, replyPhoneId, replyAccessToken, saveOpts);
       }
     } else {
       console.error(`${LOG} processConfirmationResponse failed for order #${orderNumber} (${orderId}): ${result.error}`);
-      await sendWhatsAppMessage(normalizedPhone,
+      await sendAndSave(normalizedPhone,
         `Sorry, there was an issue processing your response for order #${orderNumber}. Please try again or contact support.`,
-        replyPhoneId, replyAccessToken);
+        merchantId, replyPhoneId, replyAccessToken, saveOpts);
     }
 
     await storage.createOrderChangeLog({

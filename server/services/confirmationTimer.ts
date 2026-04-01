@@ -1,9 +1,10 @@
 import { db, withRetry } from "../db";
-import { orders, merchants, robocallLogs, waAutomations, waConversations, waMessages } from "@shared/schema";
+import { orders, merchants, robocallLogs, waAutomations, waConversations, waMessages, waMetaTemplates } from "@shared/schema";
 import { eq, and, isNull, isNotNull, lte, inArray, gte } from "drizzle-orm";
 import { logConfirmationEvent } from "./confirmationEngine";
 import { formatPhoneForWhatsApp, sendWhatsAppApiRequest, sendWhatsAppTextMessage } from "../utils/integrations/whatsapp/sender";
-import { interpolateMessageBody, buildVarsFromParams } from "../utils/integrations/whatsapp/variables";
+import { interpolateMessageBody, buildVarsFromParams, buildTemplateParamsFromBody } from "../utils/integrations/whatsapp/variables";
+import { storage } from "../storage";
 import { triggerRobocallForOrder, checkAndSendPendingCalls, retryFailedCalls } from "./robocallService";
 
 const LOG_PREFIX = "[ConfirmationTimer]";
@@ -85,6 +86,51 @@ async function sendWaReminderViaTemplate(
 
     if (result.success) {
       console.log(`${LOG_PREFIX} WA reminder sent for order #${order.orderNumber} (template: ${templateName})`);
+
+      // Save to agent chat so agents can see what was sent
+      try {
+        const [metaTpl] = await db.select({ body: waMetaTemplates.body })
+          .from(waMetaTemplates)
+          .where(and(
+            eq(waMetaTemplates.merchantId, order.merchantId),
+            eq(waMetaTemplates.name, templateName),
+          ))
+          .limit(1);
+        const vars = buildVarsFromParams({
+          customerName: order.customerName || "",
+          orderNumber: order.orderNumber || "",
+          fromStatus: "NEW",
+          toStatus: "NEW",
+          totalAmount: order.totalAmount,
+          courierName: order.courierName,
+          courierTracking: order.courierTracking,
+          itemSummary: order.itemSummary,
+          city: order.city,
+          shippingAddress: order.shippingAddress,
+        });
+        const params = metaTpl?.body ? buildTemplateParamsFromBody(metaTpl.body, vars) : null;
+        const displayText = metaTpl?.body && params?.length
+          ? metaTpl.body.replace(/\{\{(\d+)\}\}/g, (_, n: string) => params[parseInt(n) - 1] ?? `{{${n}}}`)
+          : `[Template: ${templateName}]`;
+        const conv = await storage.upsertConversation({
+          merchantId: order.merchantId,
+          contactPhone: formattedPhone,
+          contactName: order.customerName || undefined,
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          lastMessage: displayText.slice(0, 200),
+        });
+        await storage.createWaMessage({
+          conversationId: conv.id,
+          direction: "outbound",
+          senderName: "System",
+          text: displayText,
+          status: "sent",
+        });
+      } catch (saveErr: any) {
+        console.warn(`${LOG_PREFIX} Failed to save reminder to chat for order #${order.orderNumber}:`, saveErr.message);
+      }
+
       return { sent: true, templateUsed: templateName };
     }
 
@@ -169,6 +215,28 @@ async function sendWaReminder(order: any, merchant: any, automation: any, attemp
 
       if (result.success) {
         console.log(`${LOG_PREFIX} WA reminder #${attemptNumber} sent (plain text, 24h window open) for order #${order.orderNumber}`);
+
+        // Save to agent chat so agents can see what was sent
+        try {
+          const conv = await storage.upsertConversation({
+            merchantId: order.merchantId,
+            contactPhone: formattedPhone,
+            contactName: order.customerName || undefined,
+            orderId: order.id,
+            orderNumber: order.orderNumber,
+            lastMessage: messageText.slice(0, 200),
+          });
+          await storage.createWaMessage({
+            conversationId: conv.id,
+            direction: "outbound",
+            senderName: "System",
+            text: messageText,
+            status: "sent",
+          });
+        } catch (saveErr: any) {
+          console.warn(`${LOG_PREFIX} Failed to save plain-text reminder to chat for order #${order.orderNumber}:`, saveErr.message);
+        }
+
         return { sent: true };
       }
 
