@@ -17702,7 +17702,7 @@ export async function registerRoutes(
       // Build structured reason from category fields
       let structuredReason: string | null = reason || null;
       if (complaintCategory === "order") {
-        structuredReason = orderNumber ? `Order complaint: #${orderNumber}` : "Order complaint";
+        structuredReason = "Order complaint";
       } else if (complaintCategory === "logistics") {
         structuredReason = logisticsNote ? `Logistics complaint: ${logisticsNote}` : "Logistics complaint";
       } else if (complaintCategory === "product") {

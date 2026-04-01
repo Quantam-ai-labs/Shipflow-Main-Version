@@ -592,6 +592,7 @@ function NewComplaintDialog({ open, onOpenChange }: { open: boolean; onOpenChang
   });
 
   const canSubmit = (!customerName && !customerPhone) === false &&
+    !!complaintCategory &&
     (complaintCategory !== "product" || !!selectedProduct);
 
   return (
