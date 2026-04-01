@@ -614,13 +614,8 @@ async function checkOrphanedConfirmations() {
 
         if (currentAttemptCount >= maxAttempts) continue;
 
-        const firstRetryDelayHours: number | null = automation?.retryAttempts?.[0]?.delayHours ?? null;
-        const delayMs = firstRetryDelayHours != null
-          ? firstRetryDelayHours * 60 * 60 * 1000
-          : (merchant.waAttempt2DelayHours || 4) * 60 * 60 * 1000;
-
         await db.update(orders).set({
-          waNextAttemptAt: new Date(now.getTime() + delayMs),
+          waNextAttemptAt: new Date(now.getTime() - 1000),
           updatedAt: now,
         }).where(eq(orders.id, order.id));
 
