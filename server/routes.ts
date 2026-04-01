@@ -17494,6 +17494,59 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/shopify/customers", isAuthenticated, async (req: any, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+      const { firstName, lastName, email, phone, address, city } = req.body;
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store?.accessToken || !store.shopDomain || !store.isConnected) {
+        return res.status(400).json({ error: "Shopify not connected" });
+      }
+      const accessToken = decryptToken(store.accessToken);
+      const customerPayload: any = {
+        customer: {
+          first_name: firstName || "",
+          last_name: lastName || "",
+          send_email_welcome: false,
+        },
+      };
+      if (email) customerPayload.customer.email = email;
+      if (phone) customerPayload.customer.phone = phone;
+      if (address || city) {
+        customerPayload.customer.addresses = [
+          {
+            address1: address || "",
+            city: city || "",
+            country: "Pakistan",
+            country_code: "PK",
+          },
+        ];
+      }
+      const url = `https://${store.shopDomain}/admin/api/2025-01/customers.json`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
+        body: JSON.stringify(customerPayload),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        let parsed: any = {};
+        try { parsed = JSON.parse(errText); } catch {}
+        const errMsg = parsed?.errors ? JSON.stringify(parsed.errors) : errText;
+        return res.status(400).json({ error: `Shopify error: ${errMsg}` });
+      }
+      const data = await response.json();
+      const created = data.customer;
+      return res.json({
+        shopifyCustomerId: String(created.id),
+        name: `${created.first_name || ""} ${created.last_name || ""}`.trim(),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/api/shopify/customers/search", isAuthenticated, async (req: any, res) => {
     try {
       const merchantId = await requireMerchant(req, res);

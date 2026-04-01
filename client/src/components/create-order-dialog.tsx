@@ -77,6 +77,9 @@ interface ShopifyCustomer {
 interface CustomerForm {
   shopifyCustomerId?: string;
   name: string;
+  firstName: string;
+  lastName: string;
+  email: string;
   phone: string;
   address: string;
   city: string;
@@ -327,11 +330,11 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
   const { toast } = useToast();
 
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
-  const [customer, setCustomer] = useState<CustomerForm>({ name: "", phone: "", address: "", city: "" });
+  const [customer, setCustomer] = useState<CustomerForm>({ name: "", firstName: "", lastName: "", email: "", phone: "", address: "", city: "" });
+  const [customerMode, setCustomerMode] = useState<"search" | "new">("search");
   const [customerSearch, setCustomerSearch] = useState("");
   const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState("");
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
-  const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [shopifyError, setShopifyError] = useState<string | null>(null);
 
   const [discountExpanded, setDiscountExpanded] = useState(false);
@@ -409,12 +412,19 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
     },
   });
 
+  const createCustomerMutation = useMutation({
+    mutationFn: async (customerData: any) => {
+      const res = await apiRequest("POST", "/api/shopify/customers", customerData);
+      return res.json();
+    },
+  });
+
   function reset() {
     setLineItems([]);
-    setCustomer({ name: "", phone: "", address: "", city: "" });
+    setCustomer({ name: "", firstName: "", lastName: "", email: "", phone: "", address: "", city: "" });
+    setCustomerMode("search");
     setCustomerSearch("");
     setDebouncedCustomerSearch("");
-    setShowNewCustomer(false);
     setDiscountExpanded(false);
     setDiscountValue("");
     setShippingExpanded(false);
@@ -434,16 +444,19 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
   }
 
   function selectCustomer(c: ShopifyCustomer) {
+    const nameParts = c.name.split(" ");
     setCustomer({
       shopifyCustomerId: c.id,
       name: c.name,
+      firstName: nameParts[0] || "",
+      lastName: nameParts.slice(1).join(" ") || "",
+      email: c.email || "",
       phone: c.phone || "",
       address: c.address?.address1 || "",
       city: c.address?.city || "",
     });
     setCustomerSearch(c.name);
     setCustomerDropdownOpen(false);
-    setShowNewCustomer(false);
   }
 
   function updateQty(idx: number, delta: number) {
@@ -483,18 +496,56 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
     : 0;
   const total = Math.max(0, subtotal - discountAmount + shipAmt);
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (lineItems.length === 0) {
       toast({ title: "No products added", description: "Add at least one product to create an order.", variant: "destructive" });
       return;
     }
+
+    let resolvedCustomer = { ...customer };
+
+    if (customerMode === "new") {
+      const hasName = (customer.firstName || customer.lastName).trim().length > 0;
+      const hasContact = customer.phone.trim().length > 0 || customer.email.trim().length > 0;
+      if (!hasName || !hasContact) {
+        toast({
+          title: "Customer info required",
+          description: "Please enter at least a name and a phone number or email.",
+          variant: "destructive",
+        });
+        return;
+      }
+      try {
+        const newCustData = await createCustomerMutation.mutateAsync({
+          firstName: customer.firstName,
+          lastName: customer.lastName,
+          email: customer.email,
+          phone: customer.phone,
+          address: customer.address,
+          city: customer.city,
+        });
+        if (newCustData.error) {
+          toast({ title: "Failed to create customer", description: newCustData.error, variant: "destructive" });
+          return;
+        }
+        resolvedCustomer = {
+          ...resolvedCustomer,
+          shopifyCustomerId: String(newCustData.shopifyCustomerId),
+          name: `${customer.firstName} ${customer.lastName}`.trim(),
+        };
+      } catch (err: any) {
+        toast({ title: "Failed to create customer", description: err.message, variant: "destructive" });
+        return;
+      }
+    }
+
     const payload = {
       customer: {
-        shopifyCustomerId: customer.shopifyCustomerId,
-        name: customer.name,
-        phone: customer.phone,
-        address: customer.address,
-        city: customer.city,
+        shopifyCustomerId: resolvedCustomer.shopifyCustomerId,
+        name: resolvedCustomer.name,
+        phone: resolvedCustomer.phone,
+        address: resolvedCustomer.address,
+        city: resolvedCustomer.city,
       },
       lineItems,
       discountType: discountExpanded && discVal > 0 ? discountType : null,
@@ -506,7 +557,7 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
     };
     pendingSnapshotRef.current = {
       lineItems,
-      customer,
+      customer: resolvedCustomer,
       subtotal,
       discountAmount,
       discountType,
@@ -870,94 +921,161 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
                     </h3>
                   </div>
                   <div className="p-4 flex flex-col gap-3">
-                    {shopifyError && (
-                      <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-400" data-testid="status-shopify-error">
-                        ⚠ {shopifyError} — customer search unavailable
-                      </div>
-                    )}
-                    <div className="relative" ref={customerDropdownRef}>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Search or create a customer"
-                          value={customerSearch}
-                          onChange={(e) => {
-                            setCustomerSearch(e.target.value);
-                            setCustomerDropdownOpen(true);
-                            if (!e.target.value) {
-                              setCustomer({ name: "", phone: "", address: "", city: "" });
-                            }
-                          }}
-                          onFocus={() => setCustomerDropdownOpen(true)}
-                          className="pl-9 text-sm"
-                          data-testid="input-customer-search"
-                        />
-                        {customersLoading && (
-                          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
-                        )}
-                      </div>
-                      {customerDropdownOpen && debouncedCustomerSearch && (
-                        <div className="absolute top-full left-0 right-0 z-50 bg-popover border rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto">
-                          {(customerResults || []).length === 0 && !customersLoading ? (
-                            <div className="p-3">
-                              <button
-                                className="w-full text-left text-sm text-primary hover:underline"
-                                onClick={() => {
-                                  setShowNewCustomer(true);
-                                  setCustomer((c) => ({ ...c, name: customerSearch }));
-                                  setCustomerDropdownOpen(false);
-                                }}
-                                data-testid="button-create-new-customer"
-                              >
-                                + Create "{customerSearch}" as new customer
-                              </button>
-                            </div>
-                          ) : (
-                            (customerResults || []).map((c) => (
-                              <button
-                                key={c.id}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex flex-col gap-0.5"
-                                onClick={() => selectCustomer(c)}
-                                data-testid={`option-customer-${c.id}`}
-                              >
-                                <span className="font-medium">{c.name}</span>
-                                <span className="text-muted-foreground text-xs">{c.phone || c.email || "No contact"}</span>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      )}
+                    {/* Mode toggle */}
+                    <div className="flex rounded-md border overflow-hidden text-sm">
+                      <button
+                        type="button"
+                        className={`flex-1 px-3 py-1.5 font-medium transition-colors ${customerMode === "search" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted"}`}
+                        onClick={() => {
+                          setCustomerMode("search");
+                          setCustomer({ name: "", firstName: "", lastName: "", email: "", phone: "", address: "", city: "" });
+                        }}
+                        data-testid="button-customer-mode-search"
+                      >
+                        Search Customer
+                      </button>
+                      <button
+                        type="button"
+                        className={`flex-1 px-3 py-1.5 font-medium transition-colors border-l ${customerMode === "new" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:bg-muted"}`}
+                        onClick={() => {
+                          setCustomerMode("new");
+                          setCustomer({ name: "", firstName: "", lastName: "", email: "", phone: "", address: "", city: "" });
+                          setCustomerSearch("");
+                          setCustomerDropdownOpen(false);
+                        }}
+                        data-testid="button-customer-mode-new"
+                      >
+                        Add New Customer
+                      </button>
                     </div>
 
-                    {(customer.shopifyCustomerId || showNewCustomer) && (
-                      <div className="flex flex-col gap-2 mt-1">
-                        <Input
-                          placeholder="Full name"
-                          value={customer.name}
-                          onChange={(e) => setCustomer((c) => ({ ...c, name: e.target.value }))}
-                          className="text-sm"
-                          data-testid="input-customer-name"
-                        />
+                    {customerMode === "search" ? (
+                      <>
+                        {shopifyError && (
+                          <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-400" data-testid="status-shopify-error">
+                            ⚠ {shopifyError} — customer search unavailable
+                          </div>
+                        )}
+                        <div className="relative" ref={customerDropdownRef}>
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Search customer by name, email, phone"
+                              value={customerSearch}
+                              onChange={(e) => {
+                                setCustomerSearch(e.target.value);
+                                setCustomerDropdownOpen(true);
+                                if (!e.target.value) {
+                                  setCustomer({ name: "", firstName: "", lastName: "", email: "", phone: "", address: "", city: "" });
+                                }
+                              }}
+                              onFocus={() => setCustomerDropdownOpen(true)}
+                              className="pl-9 text-sm"
+                              data-testid="input-customer-search"
+                            />
+                            {customersLoading && (
+                              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+                            )}
+                          </div>
+                          {customerDropdownOpen && debouncedCustomerSearch && (
+                            <div className="absolute top-full left-0 right-0 z-50 bg-popover border rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto">
+                              {(customerResults || []).length === 0 && !customersLoading ? (
+                                <div className="p-3 text-sm text-muted-foreground">No customers found</div>
+                              ) : (
+                                (customerResults || []).map((c) => (
+                                  <button
+                                    key={c.id}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex flex-col gap-0.5"
+                                    onClick={() => selectCustomer(c)}
+                                    data-testid={`option-customer-${c.id}`}
+                                  >
+                                    <span className="font-medium">{c.name}</span>
+                                    <span className="text-muted-foreground text-xs">{c.phone || c.email || "No contact"}</span>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {customer.shopifyCustomerId && (
+                          <div className="flex flex-col gap-2 mt-1">
+                            <Input
+                              placeholder="Full name"
+                              value={customer.name}
+                              onChange={(e) => setCustomer((c) => ({ ...c, name: e.target.value }))}
+                              className="text-sm"
+                              data-testid="input-customer-name"
+                            />
+                            <Input
+                              placeholder="Phone number"
+                              value={customer.phone}
+                              onChange={(e) => setCustomer((c) => ({ ...c, phone: e.target.value }))}
+                              className="text-sm"
+                              data-testid="input-customer-phone"
+                            />
+                            <Input
+                              placeholder="Address"
+                              value={customer.address}
+                              onChange={(e) => setCustomer((c) => ({ ...c, address: e.target.value }))}
+                              className="text-sm"
+                              data-testid="input-customer-address"
+                            />
+                            <Input
+                              placeholder="City"
+                              value={customer.city}
+                              onChange={(e) => setCustomer((c) => ({ ...c, city: e.target.value }))}
+                              className="text-sm"
+                              data-testid="input-customer-city"
+                            />
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="First name"
+                            value={customer.firstName}
+                            onChange={(e) => setCustomer((c) => ({ ...c, firstName: e.target.value }))}
+                            className="text-sm"
+                            data-testid="input-new-customer-firstname"
+                          />
+                          <Input
+                            placeholder="Last name"
+                            value={customer.lastName}
+                            onChange={(e) => setCustomer((c) => ({ ...c, lastName: e.target.value }))}
+                            className="text-sm"
+                            data-testid="input-new-customer-lastname"
+                          />
+                        </div>
                         <Input
                           placeholder="Phone number"
                           value={customer.phone}
                           onChange={(e) => setCustomer((c) => ({ ...c, phone: e.target.value }))}
                           className="text-sm"
-                          data-testid="input-customer-phone"
+                          data-testid="input-new-customer-phone"
+                        />
+                        <Input
+                          placeholder="Email"
+                          value={customer.email}
+                          onChange={(e) => setCustomer((c) => ({ ...c, email: e.target.value }))}
+                          className="text-sm"
+                          type="email"
+                          data-testid="input-new-customer-email"
                         />
                         <Input
                           placeholder="Address"
                           value={customer.address}
                           onChange={(e) => setCustomer((c) => ({ ...c, address: e.target.value }))}
                           className="text-sm"
-                          data-testid="input-customer-address"
+                          data-testid="input-new-customer-address"
                         />
                         <Input
                           placeholder="City"
                           value={customer.city}
                           onChange={(e) => setCustomer((c) => ({ ...c, city: e.target.value }))}
                           className="text-sm"
-                          data-testid="input-customer-city"
+                          data-testid="input-new-customer-city"
                         />
                       </div>
                     )}
@@ -1025,14 +1143,16 @@ export function CreateOrderDialog({ open, onClose }: CreateOrderDialogProps) {
               )}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleClose} disabled={createMutation.isPending}>Cancel</Button>
+              <Button variant="outline" onClick={handleClose} disabled={createMutation.isPending || createCustomerMutation.isPending}>Cancel</Button>
               <Button
                 onClick={handleSubmit}
-                disabled={createMutation.isPending || lineItems.length === 0}
+                disabled={createMutation.isPending || createCustomerMutation.isPending || lineItems.length === 0}
                 className="min-w-32"
                 data-testid="button-create-order"
               >
-                {createMutation.isPending ? (
+                {createCustomerMutation.isPending ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating customer...</>
+                ) : createMutation.isPending ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
                 ) : (
                   "Create Order"
