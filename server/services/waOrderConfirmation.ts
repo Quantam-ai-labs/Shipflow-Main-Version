@@ -74,13 +74,16 @@ async function handleConflictClarificationReply(
         updatedAt: now,
       }).where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
 
-      await transitionOrder({
+      const transitionResult1 = await transitionOrder({
         merchantId, orderId,
         toStatus: "READY_TO_SHIP",
         action: "whatsapp_confirm",
         actorType: "system",
         reason: "Customer confirmed after conflict clarification",
-      }).catch(() => {});
+      });
+      if (!transitionResult1.success) {
+        console.error(`${LOG} ⚠️ transitionOrder READY_TO_SHIP failed for #${orderNumber}: ${transitionResult1.error}`);
+      }
 
       await sendWhatsAppMessage(normalizedPhone,
         `✅ Thank you! Your order #${orderNumber} has been confirmed and will be processed shortly.`,
@@ -138,13 +141,16 @@ async function handleConflictClarificationReply(
         updatedAt: now,
       }).where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
 
-      await transitionOrder({
+      const transitionResult2 = await transitionOrder({
         merchantId, orderId,
         toStatus: "READY_TO_SHIP",
         action: "whatsapp_confirm",
         actorType: "system",
         reason: "Customer confirmed after conflict clarification (reversed cancel intent)",
-      }).catch(() => {});
+      });
+      if (!transitionResult2.success) {
+        console.error(`${LOG} ⚠️ transitionOrder READY_TO_SHIP failed for #${orderNumber}: ${transitionResult2.error}`);
+      }
 
       await sendWhatsAppMessage(normalizedPhone,
         `✅ Got it! Your order #${orderNumber} has been confirmed and will be processed shortly.`,
@@ -166,13 +172,16 @@ async function handleConflictClarificationReply(
         updatedAt: now,
       }).where(and(eq(orders.id, orderId), eq(orders.merchantId, merchantId)));
 
-      await transitionOrder({
+      const transitionResult3 = await transitionOrder({
         merchantId, orderId,
         toStatus: "CANCELLED",
         action: "whatsapp_cancel",
         actorType: "system",
         reason: `Customer cancelled after conflict. Reason: ${cancelReason}`,
-      }).catch(() => {});
+      });
+      if (!transitionResult3.success) {
+        console.error(`${LOG} ⚠️ transitionOrder CANCELLED failed for #${orderNumber}: ${transitionResult3.error}`);
+      }
 
       await sendWhatsAppMessage(normalizedPhone,
         `We've noted your cancellation for order #${orderNumber}. Thank you for letting us know — we've recorded your reason. If you change your mind or need assistance, please feel free to reach out.`,
@@ -252,7 +261,9 @@ export async function processWhatsAppOrderResponse(
         // Label conversation as conflicting — label stays until agent manually clears
         const conv = await storage.getConversationByPhone(merchantId, normalizedPhone);
         if (conv) {
-          await storage.updateConversationLabel(merchantId, conv.id, "conflicting").catch(() => {});
+          await storage.updateConversationLabel(merchantId, conv.id, "conflicting").catch((e: any) =>
+            console.error(`${LOG} Failed to label conversation as conflicting for #${orderNumber}:`, e.message)
+          );
         }
 
         // Create notification for merchant
@@ -266,7 +277,8 @@ export async function processWhatsAppOrderResponse(
         });
 
         // Send professional clarification message
-        const prevWord = previousStatus.startsWith("confirm") ? "Confirm" : "Cancel";
+        const isConfirmedStatus = previousStatus === "confirmed" || previousStatus === "manual_confirmed";
+        const prevWord = isConfirmedStatus ? "Confirm" : "Cancel";
         const newWord = action === "confirm" ? "Confirm" : "Cancel";
         await sendWhatsAppMessage(normalizedPhone,
           `Hi! We noticed you pressed both *${prevWord}* and *${newWord}* for order #${orderNumber}.\n\nTo finalize — please reply:\n• *Confirm* — to proceed with your order\n• *Cancel* — to cancel (and share the reason)\n\nThank you for your time! 🙏`,
