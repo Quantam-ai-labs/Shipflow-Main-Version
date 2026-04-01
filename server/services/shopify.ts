@@ -1518,3 +1518,40 @@ export async function cancelShopifyOrder(
 }
 
 export const shopifyService = new ShopifyService();
+
+export async function reopenShopifyOrder(
+  shopDomain: string,
+  accessToken: string,
+  shopifyOrderId: string,
+): Promise<{ success: boolean; order?: any; error?: string }> {
+  try {
+    console.log(`[Shopify Reopen] Reopening order ${shopifyOrderId} on ${shopDomain}`);
+
+    const url = `https://${shopDomain}/admin/api/2025-01/orders/${shopifyOrderId}/open.json`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`[Shopify Reopen] Failed: ${response.status} ${errText}`);
+      if (response.status === 422) {
+        return { success: false, error: `Order cannot be reopened (may be fulfilled or in a non-reopenable state): ${errText}` };
+      }
+      return { success: false, error: `Shopify API error ${response.status}: ${errText}` };
+    }
+
+    const data = await response.json();
+    console.log(`[Shopify Reopen] Successfully reopened order ${shopifyOrderId}`);
+    return { success: true, order: data.order };
+  } catch (error: any) {
+    console.error(`[Shopify Reopen] Error:`, error);
+    return { success: false, error: error.message || 'Unknown error' };
+  }
+}

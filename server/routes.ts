@@ -77,6 +77,7 @@ import {
   shopifyService,
   cancelShopifyOrder,
   cancelShopifyFulfillment,
+  reopenShopifyOrder,
 } from "./services/shopify";
 import { cancelCourierBooking, trackShipment } from "./services/couriers";
 import {
@@ -1973,14 +1974,46 @@ export async function registerRoutes(
 
         const rawShopify = order.rawShopifyData as any;
         if (rawShopify?.cancelled_at) {
-          if (order.cancelReason !== "Cancelled in Shopify") {
-            await storage.updateOrderWorkflow(merchantId, orderId, {
-              cancelReason: "Cancelled in Shopify",
-            });
+          const userId = getSessionUserId(req) || "system";
+          const actorName = await getSessionUserName(req);
+          const alreadyCancelledUpdates: Record<string, any> = {};
+          if (!order.cancelledAt) alreadyCancelledUpdates.cancelledAt = new Date();
+          if (order.cancelReason !== "Cancelled in Shopify") alreadyCancelledUpdates.cancelReason = "Cancelled in Shopify";
+          if ((order as any).orderStatus !== "cancelled") alreadyCancelledUpdates.orderStatus = "cancelled";
+          if (Object.keys(alreadyCancelledUpdates).length > 0) {
+            await storage.updateOrderWorkflow(merchantId, orderId, alreadyCancelledUpdates);
           }
-          return res
-            .status(400)
-            .json({ message: "This order is already cancelled on Shopify" });
+          const result = await transitionOrder({
+            merchantId,
+            orderId,
+            toStatus: "CANCELLED",
+            action: "shopify_cancel",
+            actorUserId: userId,
+            actorName,
+            actorType: "user",
+            reason: "Order was already cancelled on Shopify.",
+          });
+          await storage.createOrderChangeLog({
+            orderId,
+            merchantId,
+            changeType: "SHOPIFY_CANCELLED",
+            actorUserId: userId,
+            actorName,
+            actorType: "user",
+            metadata: {
+              shopifyOrderId: order.shopifyOrderId,
+              reason,
+              shopifyCancelled: true,
+              alreadyCancelled: true,
+            },
+          });
+          return res.json({
+            success: true,
+            alreadyCancelled: true,
+            order: result.order,
+            shopifyCancelled: true,
+            message: "Order was already cancelled on Shopify.",
+          });
         }
 
         const store = await storage.getShopifyStore(merchantId);
@@ -2066,6 +2099,76 @@ export async function registerRoutes(
       } catch (error) {
         console.error("Error cancelling Shopify order:", error);
         res.status(500).json({ message: "Failed to cancel Shopify order" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/orders/:id/reopen-shopify",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const merchantId = await requireMerchant(req, res);
+        if (!merchantId) return;
+        const orderId = req.params.id;
+
+        const order = await storage.getOrderById(merchantId, orderId);
+        if (!order) return res.status(404).json({ message: "Order not found" });
+
+        if (!order.shopifyOrderId) {
+          return res.status(400).json({ message: "Order has no Shopify ID - not linked to Shopify" });
+        }
+
+        const store = await storage.getShopifyStore(merchantId);
+        if (!store || !store.isConnected || !store.accessToken || !store.shopDomain) {
+          return res.status(400).json({ message: "Shopify store is not connected" });
+        }
+
+        const reopenResult = await reopenShopifyOrder(
+          store.shopDomain,
+          store.accessToken,
+          order.shopifyOrderId,
+        );
+
+        if (!reopenResult.success) {
+          return res.status(422).json({ message: reopenResult.error || "Failed to reopen order on Shopify" });
+        }
+
+        const updates: Record<string, any> = {
+          orderStatus: "open",
+          cancelledAt: null,
+          cancelReason: null,
+        };
+        if (reopenResult.order) {
+          updates.rawShopifyData = reopenResult.order;
+        }
+        await storage.updateOrderWorkflow(merchantId, orderId, updates);
+
+        const userId = getSessionUserId(req) || "system";
+        const actorName = await getSessionUserName(req);
+
+        await db.insert(workflowAuditLog).values({
+          orderId,
+          merchantId,
+          action: "shopify_reopen",
+          actorUserId: userId,
+          actorName,
+          actorType: "user",
+          toStatus: order.workflowStatus || "CANCELLED",
+          fromStatus: order.workflowStatus || "CANCELLED",
+          reason: "Order reopened on Shopify via API",
+        });
+
+        const updatedOrder = await storage.getOrderById(merchantId, orderId);
+
+        res.json({
+          success: true,
+          order: updatedOrder,
+          message: "Order reopened on Shopify successfully.",
+        });
+      } catch (error) {
+        console.error("Error reopening Shopify order:", error);
+        res.status(500).json({ message: "Failed to reopen Shopify order" });
       }
     },
   );

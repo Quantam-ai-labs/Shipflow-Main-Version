@@ -86,6 +86,7 @@ import {
   CalendarDays,
   MessageSquare,
   PhoneCall,
+  RotateCcw,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -928,6 +929,7 @@ export default function Pipeline() {
   };
 
   const [cancelConfirm, setCancelConfirm] = useState<{ open: boolean; orderId: string; type: "courier" | "shopify"; orderNumber?: string } | null>(null);
+  const [reopenShopifyConfirm, setReopenShopifyConfirm] = useState<{ orderId: string; orderNumber?: string } | null>(null);
 
   const cancelBookingMutation = useMutation({
     mutationFn: async (orderId: string) => {
@@ -1020,6 +1022,23 @@ export default function Pipeline() {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({ title: "Cannot cancel", description: err.message || "Failed to cancel on Shopify", variant: "destructive" });
       setCancelConfirm(null);
+    },
+  });
+
+  const reopenShopifyMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const res = await apiRequest("POST", `/api/orders/${orderId}/reopen-shopify`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
+      toast({ title: "Reopened on Shopify", description: "Order has been reopened on Shopify successfully." });
+      setReopenShopifyConfirm(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to reopen", description: err.message || "Failed to reopen on Shopify", variant: "destructive" });
+      setReopenShopifyConfirm(null);
     },
   });
 
@@ -2344,6 +2363,13 @@ export default function Pipeline() {
                           disabled: cancelShopifyMutation.isPending,
                         });
                       }
+                      if (et === "CANCELLED" && order.shopifyOrderId) {
+                        menuItems.push({
+                          key: "reopen-shopify", label: "Reopen on Shopify", icon: RotateCcw, className: "text-blue-600",
+                          action: () => setReopenShopifyConfirm({ orderId: order.id, orderNumber: order.orderNumber }),
+                          disabled: reopenShopifyMutation.isPending,
+                        });
+                      }
                       if (et !== "NEW" && et !== "BOOKED" && et !== "FULFILLED" && et !== "DELIVERED" && et !== "RETURN" && order.previousWorkflowStatus) {
                         menuItems.push({
                           key: "revert", label: "Revert", icon: Undo2, className: "text-muted-foreground",
@@ -3195,6 +3221,33 @@ export default function Pipeline() {
                 <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
               )}
               {cancelConfirm?.type === "courier" ? "Cancel AWB" : "Cancel on Shopify"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* Reopen on Shopify Confirmation Dialog */}
+      <AlertDialog open={!!reopenShopifyConfirm} onOpenChange={(open) => !open && setReopenShopifyConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reopen Shopify Order?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will reopen order <span className="font-medium">{String(reopenShopifyConfirm?.orderNumber || '').replace(/^#/, '')}</span> on Shopify, removing the cancellation.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-reopen-shopify-dismiss">Go Back</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="button-reopen-shopify-proceed"
+              disabled={reopenShopifyMutation.isPending}
+              onClick={() => {
+                if (!reopenShopifyConfirm) return;
+                reopenShopifyMutation.mutate(reopenShopifyConfirm.orderId);
+              }}
+            >
+              {reopenShopifyMutation.isPending && (
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              )}
+              Reopen on Shopify
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -291,6 +291,7 @@ function getActivityLabel(entry: any): string {
     if (entry.action === "courier_booked") return "Courier Booked";
     if (entry.action === "cancel_booking") return "Booking Cancelled";
     if (entry.action === "shopify_cancel") return "Shopify Cancelled";
+    if (entry.action === "shopify_reopen") return "Shopify Reopened";
     if (entry.action === "conflict_hold") return "Conflicting Responses — Needs Review";
     if (entry.action === "robocall_exhausted") return "All Calls Done — No Response";
     if (entry.action === "whatsapp_confirm") return "Confirmed via WhatsApp";
@@ -1717,6 +1718,7 @@ export default function OrderDetails() {
   const [paymentRef, setPaymentRef] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
   const [showCancelShopifyConfirm, setShowCancelShopifyConfirm] = useState(false);
+  const [showReopenShopifyConfirm, setShowReopenShopifyConfirm] = useState(false);
   const [newTagInput, setNewTagInput] = useState("");
 
   const addTagMutation = useMutation({
@@ -1942,6 +1944,23 @@ export default function OrderDetails() {
     },
   });
 
+  const reopenShopifyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/orders/${id}/reopen-shopify`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders/workflow-counts"] });
+      setShowReopenShopifyConfirm(false);
+      toast({ title: "Reopened on Shopify", description: "Order has been reopened on Shopify successfully." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to reopen", description: err.message || "Failed to reopen order on Shopify.", variant: "destructive" });
+      setShowReopenShopifyConfirm(false);
+    },
+  });
+
   const handleAddRemark = () => {
     if (!newRemark.trim()) return;
     addRemarkMutation.mutate({ content: newRemark, remarkType });
@@ -1951,6 +1970,7 @@ export default function OrderDetails() {
   const isLocked = order?.workflowStatus === "DELIVERED" || order?.workflowStatus === "RETURN" || order?.workflowStatus === "CANCELLED";
   const lockedReason = order?.workflowStatus === "CANCELLED" ? "Cancelled" : order?.workflowStatus === "RETURN" ? "Returned" : order?.workflowStatus === "DELIVERED" ? "Delivered" : "Booked";
   const canCancelOnShopify = order?.workflowStatus === "CANCELLED" && (order as any).shopifyOrderId && (order as any).orderStatus !== "cancelled";
+  const canReopenOnShopify = order?.workflowStatus === "CANCELLED" && (order as any).shopifyOrderId;
 
   const startEditingCustomer = () => {
     if (!order) return;
@@ -2117,6 +2137,22 @@ export default function OrderDetails() {
                   Cancel on Shopify
                 </Button>
               )}
+              {canReopenOnShopify && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowReopenShopifyConfirm(true)}
+                  disabled={reopenShopifyMutation.isPending}
+                  data-testid="button-reopen-shopify"
+                >
+                  {reopenShopifyMutation.isPending ? (
+                    <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  Reopen on Shopify
+                </Button>
+              )}
             </div>
             <p className="text-muted-foreground text-sm">
               {order.orderDate ? formatPkDateTime(order.orderDate) : ""}
@@ -2145,6 +2181,33 @@ export default function OrderDetails() {
                 <Button variant="destructive" onClick={() => cancelShopifyMutation.mutate()} disabled={cancelShopifyMutation.isPending} data-testid="button-cancel-shopify-yes">
                   {cancelShopifyMutation.isPending && <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
                   Yes, Cancel on Shopify
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {showReopenShopifyConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="modal-reopen-shopify">
+          <Card className="w-full max-w-md mx-4">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <RotateCcw className="w-5 h-5 text-primary" />
+                Reopen on Shopify
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to reopen order <strong>{String(order.orderNumber || '').replace(/^#/, '')}</strong> on Shopify? This will remove the cancellation on Shopify.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowReopenShopifyConfirm(false)} disabled={reopenShopifyMutation.isPending} data-testid="button-reopen-shopify-no">
+                  Cancel
+                </Button>
+                <Button onClick={() => reopenShopifyMutation.mutate()} disabled={reopenShopifyMutation.isPending} data-testid="button-reopen-shopify-yes">
+                  {reopenShopifyMutation.isPending && <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                  Yes, Reopen on Shopify
                 </Button>
               </div>
             </CardContent>
