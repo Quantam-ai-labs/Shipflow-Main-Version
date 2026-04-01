@@ -7786,7 +7786,7 @@ export async function registerRoutes(
       if (!templateName) return res.status(400).json({ error: "No template name in log entry" });
 
       const { formatPhoneForWhatsApp, sendWhatsAppApiRequest } = await import("./utils/integrations/whatsapp/sender");
-      const { buildVarsFromParams, buildTemplateParamsFromBody, extractMessageTextParams } = await import("./utils/integrations/whatsapp/variables");
+      const { buildVarsFromParams, buildTemplateParamsFromBody, extractMessageTextParams, interpolateMessageBody } = await import("./utils/integrations/whatsapp/variables");
 
       const formattedPhone = formatPhoneForWhatsApp(phone);
       if (!formattedPhone) return res.status(400).json({ error: "Invalid phone number format" });
@@ -7834,6 +7834,15 @@ export async function registerRoutes(
 
       const msgText = meta?.messageText || "";
 
+      const displayText = (() => {
+        if (metaTemplate?.body && templateParams && templateParams.length > 0) {
+          return metaTemplate.body.replace(/\{\{(\d+)\}\}/g, (_, n) => templateParams[parseInt(n) - 1] ?? `{{${n}}}`);
+        }
+        if (msgText) return msgText;
+        if (metaTemplate?.body) return interpolateMessageBody(metaTemplate.body, vars);
+        return `[Template: ${templateName}]`;
+      })();
+
       const [merchantRow] = await db.select({
         waPhoneNumberId: merchants.waPhoneNumberId,
         waAccessToken: merchants.waAccessToken,
@@ -7857,13 +7866,13 @@ export async function registerRoutes(
             contactName: order.customerName || undefined,
             orderId: order.id,
             orderNumber: order.orderNumber || undefined,
-            lastMessage: msgText.slice(0, 200),
+            lastMessage: displayText.slice(0, 200),
           });
           await storage.createWaMessage({
             conversationId: conv.id,
             direction: "outbound",
             senderName: "System (Retry)",
-            text: msgText,
+            text: displayText,
             waMessageId: result.messageId,
             status: "sent",
           });

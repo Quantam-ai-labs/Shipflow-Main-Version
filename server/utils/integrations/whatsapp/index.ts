@@ -276,13 +276,11 @@ export async function sendOrderStatusWhatsApp(
             console.log(`${LOG_PREFIX} Automation "${automation.title}" sent successfully for order ${params.orderNumber}`);
             try {
               const displayText = (() => {
-                if (msgText) return msgText;
-                if (metaTemplateBody) {
-                  if (templateParams && templateParams.length > 0) {
-                    return metaTemplateBody.replace(/\{\{(\d+)\}\}/g, (_, n) => templateParams[parseInt(n) - 1] ?? `{{${n}}}`);
-                  }
-                  return interpolateMessageBody(metaTemplateBody, vars);
+                if (metaTemplateBody && templateParams && templateParams.length > 0) {
+                  return metaTemplateBody.replace(/\{\{(\d+)\}\}/g, (_, n) => templateParams[parseInt(n) - 1] ?? `{{${n}}}`);
                 }
+                if (msgText) return msgText;
+                if (metaTemplateBody) return interpolateMessageBody(metaTemplateBody, vars);
                 return `[Template: ${tmplName}]`;
               })();
               const conv = await storage.upsertConversation({
