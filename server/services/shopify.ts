@@ -903,6 +903,11 @@ export class ShopifyService {
           if (!hasCourierStatus && existingOrder && !existingOrder.courierTracking && transformedOrder.courierTracking) {
             updateData.courierName = transformedOrder.courierName;
             updateData.courierTracking = transformedOrder.courierTracking;
+            if (transformedOrder.shopifyFulfillmentId) {
+              updateData.shopifyFulfillmentId = transformedOrder.shopifyFulfillmentId;
+            }
+          } else if (!existingOrder?.shopifyFulfillmentId && transformedOrder.shopifyFulfillmentId) {
+            updateData.shopifyFulfillmentId = transformedOrder.shopifyFulfillmentId;
           }
 
           await storage.updateOrder(merchantId, existingOrderId, updateData);
@@ -935,6 +940,9 @@ export class ShopifyService {
                 if (!hasCourierStatus && transformedOrder.courierTracking) {
                   bookedFields.courierName = transformedOrder.courierName;
                   bookedFields.courierTracking = transformedOrder.courierTracking;
+                }
+                if (transformedOrder.shopifyFulfillmentId) {
+                  bookedFields.shopifyFulfillmentId = transformedOrder.shopifyFulfillmentId;
                 }
 
                 await storage.updateOrder(merchantId, existingOrderId, bookedFields);

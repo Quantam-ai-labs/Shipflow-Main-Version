@@ -15804,12 +15804,17 @@ export async function registerRoutes(
 
   app.post("/api/admin/backfill-booked-tracking", isAuthenticated, async (req, res) => {
     try {
-      const merchantId = await requireMerchant(req, res);
-      if (!merchantId) return;
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const { merchantId } = req.body;
+      if (!merchantId) {
+        return res.status(400).json({ message: "merchantId is required in request body" });
+      }
 
       const store = await storage.getShopifyStore(merchantId);
       if (!store?.isConnected || !store?.accessToken || !store?.shopDomain) {
-        return res.status(400).json({ message: "Shopify not connected" });
+        return res.status(400).json({ message: "Shopify not connected for this merchant" });
       }
 
       const bookedWithoutTracking = await db
@@ -15861,12 +15866,19 @@ export async function registerRoutes(
             const fulfillmentData = shopifyService.extractFulfillmentData(shopifyOrder);
 
             if (fulfillmentData.courierTracking) {
-              await storage.updateOrder(merchantId, order.id, {
+              const updateFields: Record<string, any> = {
                 courierName: fulfillmentData.courierName,
                 courierTracking: fulfillmentData.courierTracking,
-              });
+              };
+              if (fulfillmentData.shopifyFulfillmentId) {
+                updateFields.shopifyFulfillmentId = fulfillmentData.shopifyFulfillmentId;
+              }
+              await storage.updateOrder(merchantId, order.id, updateFields);
               updated++;
               details.push({ orderNumber: order.orderNumber, status: "updated", courierName: fulfillmentData.courierName, courierTracking: fulfillmentData.courierTracking });
+            } else if (fulfillmentData.shopifyFulfillmentId) {
+              await storage.updateOrder(merchantId, order.id, { shopifyFulfillmentId: fulfillmentData.shopifyFulfillmentId });
+              details.push({ orderNumber: order.orderNumber, status: "fulfillment_id_only" });
             } else {
               details.push({ orderNumber: order.orderNumber, status: "no_fulfillment_tracking" });
             }
