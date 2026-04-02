@@ -463,29 +463,27 @@ function AuthenticatedLayout() {
   };
 
   return (
-    <DateRangeProvider>
-      <SidebarProvider style={style as React.CSSProperties}>
-        <div className="flex h-screen w-full">
-          <AppSidebar />
-          <div className="flex flex-col flex-1 overflow-hidden">
-            <ImpersonationBanner />
-            <header className="flex items-center justify-between gap-4 px-4 py-2.5 border-b bg-background">
-              <SidebarTrigger data-testid="button-sidebar-toggle" />
-              <div className="flex items-center gap-2">
-                <GlobalRefreshButton />
-                <NotificationBell />
-                <HeaderDateRangePicker />
-                <ThemeToggle />
-              </div>
-            </header>
-            {onboardingIncomplete && <OnboardingBanner />}
-            <main className="flex-1 overflow-auto p-4 md:p-6">
-              <AppRoutes />
-            </main>
-          </div>
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full">
+        <AppSidebar />
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <ImpersonationBanner />
+          <header className="flex items-center justify-between gap-4 px-4 py-2.5 border-b bg-background">
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+            <div className="flex items-center gap-2">
+              <GlobalRefreshButton />
+              <NotificationBell />
+              <HeaderDateRangePicker />
+              <ThemeToggle />
+            </div>
+          </header>
+          {onboardingIncomplete && <OnboardingBanner />}
+          <main className="flex-1 overflow-auto p-4 md:p-6">
+            <AppRoutes />
+          </main>
         </div>
-      </SidebarProvider>
-    </DateRangeProvider>
+      </div>
+    </SidebarProvider>
   );
 }
 
@@ -627,10 +625,12 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="dark" storageKey="shipflow-theme-v2">
         <TooltipProvider>
-          <LocationBoundedErrorBoundary>
-            <MainApp />
-            <Toaster />
-          </LocationBoundedErrorBoundary>
+          <DateRangeProvider>
+            <LocationBoundedErrorBoundary>
+              <MainApp />
+              <Toaster />
+            </LocationBoundedErrorBoundary>
+          </DateRangeProvider>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
