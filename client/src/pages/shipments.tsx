@@ -79,32 +79,32 @@ function getCourierStatusBadge(rawStatus: string) {
   const s = rawStatus.toLowerCase().trim();
   const isReturn = s.includes("return") || s.includes("undeliver") || s.includes("not deliver") || s.includes("failed") || s.includes("refused");
   if (isReturn) return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400">
       <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
       {rawStatus}
     </span>
   );
   const isDelivered = s === "delivered" || s.startsWith("delivered") || /\bdeliver(ed)?\b/.test(s);
   if (isDelivered) return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
       {rawStatus}
     </span>
   );
   if (s.includes("transit") || s.includes("pickup") || s.includes("dispatched") || s.includes("out for") || s.includes("in-transit")) return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400">
       <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
       {rawStatus}
     </span>
   );
   if (s.includes("pending") || s.includes("await") || s.includes("processing") || s.includes("booked")) return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400">
       <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
       {rawStatus}
     </span>
   );
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-muted border border-border text-muted-foreground">
       <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 flex-shrink-0" />
       {rawStatus}
     </span>
