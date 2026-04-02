@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { DateRange } from "react-day-picker";
-import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { useDateRange } from "@/contexts/date-range-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -195,11 +195,12 @@ export default function LoadsheetPage() {
 
   // ---- Logs state ----
   const [bkCourierFilter, setBkCourierFilter] = useState("all");
-  const [bkDateRange, setBkDateRange] = useState<DateRange | undefined>(undefined);
+  const { dateRange: bkDateRange, setDateRange: setBkDateRange, dateParams: bkDateParams } = useDateRange();
   const [bkPage, setBkPage] = useState(1);
 
   const [batchCourierFilter, setBatchCourierFilter] = useState("all");
-  const [batchDateRange, setBatchDateRange] = useState<DateRange | undefined>(undefined);
+  const batchDateRange = bkDateRange;
+  const setBatchDateRange = setBkDateRange;
   const [batchPage, setBatchPage] = useState(1);
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
 
@@ -241,7 +242,6 @@ export default function LoadsheetPage() {
   }, [data]);
 
   // ---- Booking Logs query ----
-  const bkDateParams = dateRangeToParams(bkDateRange);
   const bkQueryParams = new URLSearchParams({
     page: String(bkPage), pageSize: "100", courier: bkCourierFilter, batchType: "BOOKING",
     ...(bkDateParams.dateFrom ? { dateFrom: bkDateParams.dateFrom } : {}),
@@ -260,7 +260,7 @@ export default function LoadsheetPage() {
   const bkTotalPages = Math.ceil((bkData?.total ?? 0) / 100);
 
   // ---- Loadsheet Logs query ----
-  const batchDateParams = dateRangeToParams(batchDateRange);
+  const batchDateParams = bkDateParams;
   const batchQueryParams = new URLSearchParams({
     page: String(batchPage), pageSize: "100", courier: batchCourierFilter, batchType: "LOADSHEET",
     ...(batchDateParams.dateFrom ? { dateFrom: batchDateParams.dateFrom } : {}),
