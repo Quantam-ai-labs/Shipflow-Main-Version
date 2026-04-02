@@ -47,8 +47,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { Order } from "@shared/schema";
 import { Link } from "wouter";
 import { format } from "date-fns";
-import { DateRange } from "react-day-picker";
-import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { useDateRange } from "@/contexts/date-range-context";
 
 const STATUS_COLORS: Record<string, string> = {
   'BOOKED': "bg-blue-500/10 text-blue-400 border border-blue-500/20",
@@ -121,7 +121,7 @@ export default function Orders() {
   const [useBookingDateFilter, setUseBookingDateFilter] = useState(false);
   const [courierFilter, setCourierFilter] = useState("all");
   const [cityFilter, setCityFilter] = useState("");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const { dateRange, setDateRange, dateParams } = useDateRange();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(200);
   
@@ -146,8 +146,6 @@ export default function Orders() {
     }, 300);
     return () => clearTimeout(timer);
   }, []);
-
-  const dateParams = dateRangeToParams(dateRange);
 
   const POST_BOOKING_STATUSES = new Set([
     "BOOKED", "PICKED_UP", "ARRIVED_AT_ORIGIN", "IN_TRANSIT", "ARRIVED_AT_DESTINATION",
@@ -373,11 +371,10 @@ export default function Orders() {
     setStatusFilter("all");
     setCourierFilter("all");
     setCityFilter("");
-    setDateRange(undefined);
     setPage(1);
   };
 
-  const hasActiveFilters = debouncedSearch || statusFilter !== "all" || courierFilter !== "all" || cityFilter || dateRange !== undefined;
+  const hasActiveFilters = debouncedSearch || statusFilter !== "all" || courierFilter !== "all" || cityFilter;
 
   return (
     <div className="h-full flex flex-col">

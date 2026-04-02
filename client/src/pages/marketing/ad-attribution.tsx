@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
-import { DateRange } from "react-day-picker";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { useDateRange } from "@/contexts/date-range-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -64,12 +64,10 @@ function WorkflowBadge({ status }: { status: string }) {
 
 export default function AdAttribution() {
   const { toast } = useToast();
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const { dateRange, setDateRange, dateParams } = useDateRange();
   const [guideOpen, setGuideOpen] = useState(true);
   const [copied, setCopied] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null);
-
-  const dateParams = dateRangeToParams(dateRange);
 
   const { data, isLoading, refetch } = useQuery<{
     totalOrders: number;
@@ -146,7 +144,7 @@ export default function AdAttribution() {
           <p className="text-muted-foreground text-sm mt-0.5">Track which Facebook campaign or ad each order came from</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
+          <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
           <Button
             variant="outline"
             size="sm"

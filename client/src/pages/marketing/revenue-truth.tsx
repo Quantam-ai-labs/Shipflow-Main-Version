@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
 import { DateRange } from "react-day-picker";
+import { useDateRange } from "@/contexts/date-range-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -519,12 +520,7 @@ function DarkTrafficTab({ dateRange }: { dateRange: DateRange | undefined }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function RevenueTruth() {
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(from.getDate() - 29);
-    return { from, to };
-  });
+  const { dateRange, setDateRange } = useDateRange();
 
   return (
     <div className="p-6 space-y-5 max-w-[1400px] mx-auto">
@@ -535,7 +531,7 @@ export default function RevenueTruth() {
             Ground-truth attribution — your actual order data vs what Facebook reports
           </p>
         </div>
-        <DateRangePicker value={dateRange} onChange={setDateRange} />
+        <DateRangePicker dateRange={dateRange} onDateRangeChange={setDateRange} />
       </div>
 
       <Tabs defaultValue="roas">

@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
-import { DateRange } from "react-day-picker";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { useDateRange } from "@/contexts/date-range-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -202,7 +202,7 @@ export default function AdsProfitability() {
   const [productSearch, setProductSearch] = useState("");
   const [collectionTab, setCollectionTab] = useState<"products" | "collections">("products");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const { dateRange, setDateRange, dateParams } = useDateRange();
   const [orderTypeForCalc, setOrderTypeForCalc] = useState<OrderTypeForCalc>("total");
 
   const [signalModal, setSignalModal] = useState<{
@@ -258,27 +258,20 @@ export default function AdsProfitability() {
         if (parsed.packingExpense) setPackingExpense(parsed.packingExpense);
         if (parsed.statusFilter) setStatusFilter(parsed.statusFilter);
         if (parsed.orderTypeForCalc) setOrderTypeForCalc(parsed.orderTypeForCalc);
-        if (parsed.dateRangeFrom && parsed.dateRangeTo) {
-          setDateRange({ from: new Date(parsed.dateRangeFrom), to: new Date(parsed.dateRangeTo) });
-        }
         if (parsed.multiProductOverrides) setMultiProductOverrides(parsed.multiProductOverrides);
       }
     } catch {}
   }, []);
-
-  const dateParams = dateRangeToParams(dateRange);
 
   useEffect(() => {
     localStorage.setItem(
       "shipflow-profitability-settings",
       JSON.stringify({
         dollarRate, deliveryCharges, packingExpense, statusFilter, orderTypeForCalc,
-        dateRangeFrom: dateRange?.from?.toISOString() || null,
-        dateRangeTo: dateRange?.to?.toISOString() || null,
         multiProductOverrides,
       })
     );
-  }, [dollarRate, deliveryCharges, packingExpense, statusFilter, dateRange, orderTypeForCalc, multiProductOverrides]);
+  }, [dollarRate, deliveryCharges, packingExpense, statusFilter, orderTypeForCalc, multiProductOverrides]);
 
   const { data: calcData, isLoading } = useQuery<{ campaigns: CampaignData[] }>({
     queryKey: ["/api/marketing/profitability/calculator", dateParams.dateFrom, dateParams.dateTo],

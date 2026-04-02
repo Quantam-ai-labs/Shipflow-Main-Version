@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DateRange } from "react-day-picker";
-import { DateRangePicker, dateRangeToParams } from "@/components/date-range-picker";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { useDateRange } from "@/contexts/date-range-context";
 import {
   Select,
   SelectContent,
@@ -164,7 +164,7 @@ export default function Shipments() {
   const [issuesDialogOpen, setIssuesDialogOpen] = useState(false);
   const [issuesSelection, setIssuesSelection] = useState<string[]>([]);
   const [courierFilter, setCourierFilter] = useState("all");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const { dateRange, setDateRange, dateParams } = useDateRange();
   const [page, setPage] = useState(1);
   const pageSize = 100;
 
@@ -236,7 +236,6 @@ export default function Shipments() {
   const allRawStatuses = rawStatusesData?.statuses ?? [];
   const pendingStatuses = rawStatusesData?.pendingStatuses ?? [];
 
-  const dateParams = dateRangeToParams(dateRange);
   const queryParams = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
