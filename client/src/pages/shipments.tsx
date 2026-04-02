@@ -32,14 +32,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  FileText,
-  Printer,
-  Eye,
   Download,
-  MessageSquare,
   RotateCcw,
-
-
   Clock,
   X,
   Loader2,
@@ -63,7 +57,6 @@ const workflowStatusOptions = [
   { value: "RETURN", label: "Return" },
 ];
 
-
 const courierOptions = [
   { value: "all", label: "All Couriers" },
   { value: "leopards", label: "Leopards" },
@@ -71,27 +64,51 @@ const courierOptions = [
   { value: "tcs", label: "TCS" },
 ];
 
-
 const WORKFLOW_STATUS_CONFIG: Record<string, { color: string; icon: React.ElementType; label: string }> = {
-  'FULFILLED': { color: "bg-blue-500/10 text-blue-600 border-blue-500/20", icon: Truck, label: "Fulfilled" },
-  'DELIVERED': { color: "bg-green-500/10 text-green-600 border-green-500/20", icon: CheckCircle2, label: "Delivered" },
-  'RETURN': { color: "bg-red-500/10 text-red-600 border-red-500/20", icon: RotateCcw, label: "Return" },
+  'FULFILLED': { color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20", icon: Truck, label: "Fulfilled" },
+  'DELIVERED': { color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20", icon: CheckCircle2, label: "Delivered" },
+  'RETURN': { color: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20", icon: RotateCcw, label: "Return" },
 };
 
 function getWorkflowBadge(status: string) {
   const config = WORKFLOW_STATUS_CONFIG[status] || { color: "bg-muted text-muted-foreground", icon: Package, label: status };
-  return <Badge className={config.color}>{config.label}</Badge>;
+  return <Badge className={`text-xs font-medium border ${config.color}`}>{config.label}</Badge>;
 }
 
 function getCourierStatusBadge(rawStatus: string) {
   const s = rawStatus.toLowerCase().trim();
   const isReturn = s.includes("return") || s.includes("undeliver") || s.includes("not deliver") || s.includes("failed") || s.includes("refused");
-  if (isReturn) return <Badge className="text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">{rawStatus}</Badge>;
+  if (isReturn) return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+      <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+      {rawStatus}
+    </span>
+  );
   const isDelivered = s === "delivered" || s.startsWith("delivered") || /\bdeliver(ed)?\b/.test(s);
-  if (isDelivered) return <Badge className="text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{rawStatus}</Badge>;
-  if (s.includes("transit") || s.includes("pickup") || s.includes("dispatched") || s.includes("out for") || s.includes("in-transit")) return <Badge className="text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">{rawStatus}</Badge>;
-  if (s.includes("pending") || s.includes("await") || s.includes("processing") || s.includes("booked")) return <Badge className="text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">{rawStatus}</Badge>;
-  return <Badge className="text-xs font-medium bg-white/[0.04] text-white/40 border border-white/[0.08]">{rawStatus}</Badge>;
+  if (isDelivered) return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+      {rawStatus}
+    </span>
+  );
+  if (s.includes("transit") || s.includes("pickup") || s.includes("dispatched") || s.includes("out for") || s.includes("in-transit")) return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400">
+      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+      {rawStatus}
+    </span>
+  );
+  if (s.includes("pending") || s.includes("await") || s.includes("processing") || s.includes("booked")) return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+      {rawStatus}
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 flex-shrink-0" />
+      {rawStatus}
+    </span>
+  );
 }
 
 interface ShipmentOrder {
@@ -127,16 +144,13 @@ interface ShipmentsResponse {
   counts: Record<string, number>;
 }
 
-
-
-
 function Pagination({ page, totalPages, total, pageSize, onPrev, onNext, prevTestId, nextTestId }: {
   page: number; totalPages: number; total: number; pageSize: number;
   onPrev: () => void; onNext: () => void; prevTestId: string; nextTestId: string;
 }) {
   if (totalPages <= 1) return null;
   return (
-    <div className="flex items-center justify-between gap-4 p-4 border-t">
+    <div className="flex items-center justify-between gap-4 p-3 border-t">
       <p className="text-sm text-muted-foreground">
         Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total}
       </p>
@@ -363,59 +377,61 @@ export default function Shipments() {
         </TabsList>
 
         {/* ====== SHIPMENTS TAB ====== */}
-        <TabsContent value="shipments" className="space-y-6 mt-6">
+        <TabsContent value="shipments" className="space-y-4 mt-6">
+          {/* Stat Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="bg-[#0d1322] border-white/[0.08]">
+            <Card className="border">
               <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                  <Package className="w-5 h-5 text-blue-400" />
+                <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                  <Package className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-white/90" data-testid="stat-total">{totalCount}</p>
-                  <p className="text-xs text-white/40">Total Dispatched</p>
+                  <p className="text-xl font-bold" data-testid="stat-total">{totalCount}</p>
+                  <p className="text-xs text-muted-foreground">Total Dispatched</p>
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-[#0d1322] border-amber-500/20">
+            <Card className="border border-amber-500/30 dark:border-amber-500/20">
               <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-amber-400" />
+                <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-amber-400" data-testid="stat-pending">{pendingCount}</p>
-                  <p className="text-xs text-white/40">In Transit</p>
+                  <p className="text-xl font-bold text-amber-600 dark:text-amber-400" data-testid="stat-pending">{pendingCount}</p>
+                  <p className="text-xs text-muted-foreground">In Transit</p>
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-[#0d1322] border-emerald-500/20">
+            <Card className="border border-emerald-500/30 dark:border-emerald-500/20">
               <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-emerald-400" data-testid="stat-delivered">{deliveredCount}</p>
-                  <p className="text-xs text-white/40">Delivered</p>
+                  <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400" data-testid="stat-delivered">{deliveredCount}</p>
+                  <p className="text-xs text-muted-foreground">Delivered</p>
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-[#0d1322] border-red-500/20">
+            <Card className="border border-red-500/30 dark:border-red-500/20">
               <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                  <RotateCcw className="w-5 h-5 text-red-400" />
+                <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                  <RotateCcw className="w-4 h-4 text-red-600 dark:text-red-400" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-red-400" data-testid="stat-return">{returnCount}</p>
-                  <p className="text-xs text-white/40">Returned</p>
+                  <p className="text-xl font-bold text-red-600 dark:text-red-400" data-testid="stat-return">{returnCount}</p>
+                  <p className="text-xs text-muted-foreground">Returned</p>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          <Card className="bg-[#0d1322] border-white/[0.08]">
-            <CardContent className="p-4">
-              <div className="flex flex-col lg:flex-row gap-4">
+          {/* Filters */}
+          <Card className="border">
+            <CardContent className="p-3">
+              <div className="flex flex-col lg:flex-row gap-3">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     placeholder="Search by tracking number, order, customer, or city..."
                     value={search}
@@ -426,7 +442,7 @@ export default function Shipments() {
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-                    <SelectTrigger className="w-[160px]" data-testid="select-shipment-status">
+                    <SelectTrigger className="w-[150px]" data-testid="select-shipment-status">
                       <Filter className="w-4 h-4 mr-2" />
                       <SelectValue placeholder="Stage" />
                     </SelectTrigger>
@@ -437,7 +453,7 @@ export default function Shipments() {
                     </SelectContent>
                   </Select>
                   <Select value={shipmentStatusFilter} onValueChange={(v) => { setShipmentStatusFilter(v); setIssuesActive(false); setPage(1); }}>
-                    <SelectTrigger className="w-[200px]" data-testid="select-shipment-status-filter">
+                    <SelectTrigger className="w-[190px]" data-testid="select-shipment-status-filter">
                       <Package className="w-4 h-4 mr-2" />
                       <SelectValue placeholder="Courier Status" />
                     </SelectTrigger>
@@ -480,7 +496,7 @@ export default function Shipments() {
                     </Button>
                   )}
                   <Select value={courierFilter} onValueChange={(v) => { setCourierFilter(v); setPage(1); }}>
-                    <SelectTrigger className="w-[160px]" data-testid="select-shipment-courier">
+                    <SelectTrigger className="w-[150px]" data-testid="select-shipment-courier">
                       <Truck className="w-4 h-4 mr-2" />
                       <SelectValue placeholder="Courier" />
                     </SelectTrigger>
@@ -509,57 +525,62 @@ export default function Shipments() {
             </div>
           )}
 
-          <Card className="bg-[#0d1322] border-white/[0.08]">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg font-semibold flex items-center gap-2 text-white/90">
-                <Truck className="w-5 h-5 text-blue-400" />
+          {/* Shipments Table */}
+          <Card className="border">
+            <CardHeader className="pb-3 pt-4 px-4">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Truck className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                 Shipments
                 {data?.total !== undefined && (
-                  <Badge className="ml-2 bg-blue-500/10 text-blue-400 border border-blue-500/20">{data.total} orders</Badge>
+                  <Badge className="ml-1 text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">{data.total} orders</Badge>
                 )}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {isLoading ? (
-                <div className="p-4 space-y-4">
+                <div className="p-4 space-y-3">
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                     <div key={i} className="flex items-center gap-4">
-                      <Skeleton className="h-4 w-28" />
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-4 w-32 flex-1" />
-                      <Skeleton className="h-6 w-24" />
+                      <Skeleton className="h-3 w-28" />
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-3 w-32 flex-1" />
+                      <Skeleton className="h-5 w-20" />
                     </div>
                   ))}
                 </div>
               ) : shipmentOrders.length > 0 ? (
                 <>
                   <div className="overflow-x-auto">
-                    <Table>
+                    <Table className="[&_th]:py-2.5 [&_td]:py-2.5 [&_th]:px-3 [&_td]:px-3">
                       <TableHeader>
-                        <TableRow className="bg-white/[0.04] hover:bg-white/[0.04]">
-                          <TableHead className="w-10 text-white/40 text-[11px] font-medium uppercase tracking-wider">
+                        <TableRow className="bg-muted/40 hover:bg-muted/40 border-b">
+                          <TableHead className="w-8">
                             <Checkbox
                               checked={allCurrentPageSelected ? true : someCurrentPageSelected ? "indeterminate" : false}
                               onCheckedChange={toggleSelectAll}
                               data-testid="checkbox-select-all-shipments"
                             />
                           </TableHead>
-                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Order</TableHead>
-                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Customer</TableHead>
-                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">City</TableHead>
-                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier</TableHead>
-                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Tracking #</TableHead>
-                          <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Amount</TableHead>
-                          <TableHead className="text-right text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier Wt.</TableHead>
-                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Stage</TableHead>
-                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Courier Status</TableHead>
-                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Remarks</TableHead>
-                          <TableHead className="text-white/40 text-[11px] font-medium uppercase tracking-wider">Date</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Order</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Customer</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">City</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Courier</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Tracking #</TableHead>
+                          <TableHead className="text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount</TableHead>
+                          <TableHead className="text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Wt.</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Stage</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Courier Status</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Remarks</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Date</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {shipmentOrders.map((order) => (
-                          <TableRow key={order.id} className="hover:bg-blue-500/[0.06]" data-testid={`shipment-row-${order.id}`}>
+                          <TableRow
+                            key={order.id}
+                            className="border-b hover:bg-muted/30 transition-colors"
+                            data-testid={`shipment-row-${order.id}`}
+                          >
                             <TableCell>
                               <Checkbox
                                 checked={selectedIds.has(order.id)}
@@ -568,50 +589,56 @@ export default function Shipments() {
                               />
                             </TableCell>
                             <TableCell>
-                              <Link href={`/orders/detail/${order.id}`} className="text-primary hover:underline font-medium" data-testid={`link-order-${order.id}`}>
-                                {String(order.orderNumber || '').replace(/^#/, '')}
+                              <Link
+                                href={`/orders/detail/${order.id}`}
+                                className="text-primary hover:underline font-semibold text-sm"
+                                data-testid={`link-order-${order.id}`}
+                              >
+                                #{String(order.orderNumber || '').replace(/^#/, '')}
                               </Link>
                             </TableCell>
                             <TableCell>
                               <div>
-                                <p className="font-medium text-sm" data-testid={`text-customer-${order.id}`}>{order.customerName}</p>
-                                <p className="text-xs text-muted-foreground">{order.customerPhone || "-"}</p>
+                                <p className="font-medium text-sm leading-tight" data-testid={`text-customer-${order.id}`}>{order.customerName}</p>
+                                {order.customerPhone && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">{order.customerPhone}</p>
+                                )}
                               </div>
                             </TableCell>
-                            <TableCell className="text-muted-foreground">{order.city || "-"}</TableCell>
-                            <TableCell className="capitalize">{order.courierName || "-"}</TableCell>
-                            <TableCell className="font-mono text-sm">{order.courierTracking || "-"}</TableCell>
-                            <TableCell className="text-right font-medium">
-                              {order.totalAmount ? `PKR ${Number(order.totalAmount).toLocaleString()}` : "-"}
+                            <TableCell className="text-sm text-muted-foreground">{order.city || "—"}</TableCell>
+                            <TableCell className="text-sm capitalize">{order.courierName || "—"}</TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground">{order.courierTracking || "—"}</TableCell>
+                            <TableCell className="text-right text-sm font-semibold">
+                              {order.totalAmount ? `PKR ${Number(order.totalAmount).toLocaleString()}` : "—"}
                             </TableCell>
-                            <TableCell className="text-right text-sm text-muted-foreground" data-testid={`text-courier-weight-${order.id}`}>
+                            <TableCell className="text-right text-xs text-muted-foreground" data-testid={`text-courier-weight-${order.id}`}>
                               {order.courierWeight ? `${Number(order.courierWeight).toFixed(0)}g` : "—"}
                             </TableCell>
                             <TableCell data-testid={`badge-status-${order.id}`}>
                               {getWorkflowBadge(order.workflowStatus)}
                             </TableCell>
                             <TableCell className="text-sm">
-                              {order.courierRawStatus ? getCourierStatusBadge(order.courierRawStatus) : <span className="text-white/20">—</span>}
+                              {order.courierRawStatus ? getCourierStatusBadge(order.courierRawStatus) : <span className="text-muted-foreground/40 text-xs">—</span>}
                             </TableCell>
                             <TableCell data-testid={`text-remark-${order.id}`}>
                               <button
-                                className="text-left max-w-[200px] cursor-pointer hover-elevate rounded-md px-1 py-0.5"
+                                className="text-left max-w-[180px] cursor-pointer hover-elevate rounded px-1 py-0.5"
                                 onClick={() => openRemarkDialog(order)}
                                 data-testid={`button-remark-${order.id}`}
                               >
                                 {order.remark ? (
-                                  <p className="text-sm text-muted-foreground truncate" title={order.remark}>{order.remark}</p>
+                                  <p className="text-xs text-muted-foreground truncate" title={order.remark}>{order.remark}</p>
                                 ) : (
-                                  <span className="text-muted-foreground/50 text-sm">Add...</span>
+                                  <span className="text-muted-foreground/50 text-xs">Add...</span>
                                 )}
                               </button>
                             </TableCell>
-                            <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                            <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
                               {order.dispatchedAt
                                 ? formatPkDateTime(order.dispatchedAt)
                                 : order.orderDate
                                 ? formatPkDate(order.orderDate)
-                                : "-"}
+                                : "—"}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -624,7 +651,7 @@ export default function Shipments() {
                 </>
               ) : (
                 <div className="text-center py-16">
-                  <Truck className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                  <Truck className="w-10 h-10 text-muted-foreground/30 mx-auto mb-4" />
                   <h3 className="font-medium mb-1">No shipments found</h3>
                   <p className="text-sm text-muted-foreground">
                     {search || statusFilter !== "all" || courierFilter !== "all"
@@ -644,7 +671,7 @@ export default function Shipments() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle data-testid="text-remark-dialog-title">
-              Edit Remark — {String(selectedOrder?.orderNumber || '').replace(/^#/, '')}
+              Edit Remark — #{String(selectedOrder?.orderNumber || '').replace(/^#/, '')}
             </DialogTitle>
           </DialogHeader>
           <Textarea
@@ -720,22 +747,22 @@ export default function Shipments() {
                     <p className="text-sm text-muted-foreground text-center py-4">No statuses match your search</p>
                   ) : (
                     filteredStatuses.map((status) => (
-                <label
-                  key={status}
-                  className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
-                  data-testid={`checkbox-issue-${status}`}
-                >
-                  <Checkbox
-                    checked={issuesSelection.includes(status)}
-                    onCheckedChange={(checked) => {
-                      setIssuesSelection((prev) =>
-                        checked ? [...prev, status] : prev.filter((s) => s !== status)
-                      );
-                    }}
-                  />
-                  <span className="text-sm">{status}</span>
-                </label>
-                  ))
+                      <label
+                        key={status}
+                        className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
+                        data-testid={`checkbox-issue-${status}`}
+                      >
+                        <Checkbox
+                          checked={issuesSelection.includes(status)}
+                          onCheckedChange={(checked) => {
+                            setIssuesSelection((prev) =>
+                              checked ? [...prev, status] : prev.filter((s) => s !== status)
+                            );
+                          }}
+                        />
+                        <span className="text-sm">{status}</span>
+                      </label>
+                    ))
                   )}
                 </div>
               </>
