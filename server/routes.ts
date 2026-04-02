@@ -15802,6 +15802,99 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/backfill-booked-tracking", isAuthenticated, async (req, res) => {
+    try {
+      const merchantId = await requireMerchant(req, res);
+      if (!merchantId) return;
+
+      const store = await storage.getShopifyStore(merchantId);
+      if (!store?.isConnected || !store?.accessToken || !store?.shopDomain) {
+        return res.status(400).json({ message: "Shopify not connected" });
+      }
+
+      const bookedWithoutTracking = await db
+        .select({
+          id: orders.id,
+          shopifyOrderId: orders.shopifyOrderId,
+          orderNumber: orders.orderNumber,
+          courierName: orders.courierName,
+          courierTracking: orders.courierTracking,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.merchantId, merchantId),
+            eq(orders.workflowStatus, 'BOOKED'),
+            isNull(orders.courierTracking),
+            isNotNull(orders.shopifyOrderId),
+          )
+        )
+        .limit(500);
+
+      if (bookedWithoutTracking.length === 0) {
+        return res.json({ message: "No BOOKED orders missing tracking", updated: 0 });
+      }
+
+      const accessToken = decryptToken(store.accessToken);
+      const shopDomain = store.shopDomain;
+      let updated = 0;
+      const details: any[] = [];
+
+      const batchSize = 10;
+      for (let i = 0; i < bookedWithoutTracking.length; i += batchSize) {
+        const batch = bookedWithoutTracking.slice(i, i + batchSize);
+        const batchPromises = batch.map(async (order) => {
+          try {
+            const shopifyOrderId = order.shopifyOrderId;
+            const url = `https://${shopDomain}/admin/api/2025-01/orders/${shopifyOrderId}.json?fields=id,fulfillments`;
+            const response = await fetch(url, {
+              headers: { "X-Shopify-Access-Token": accessToken, "Content-Type": "application/json" },
+            });
+
+            if (!response.ok) {
+              details.push({ orderNumber: order.orderNumber, status: "shopify_fetch_failed", httpStatus: response.status });
+              return;
+            }
+
+            const data = await response.json() as { order: any };
+            const shopifyOrder = data.order;
+            const fulfillmentData = shopifyService.extractFulfillmentData(shopifyOrder);
+
+            if (fulfillmentData.courierTracking) {
+              await storage.updateOrder(merchantId, order.id, {
+                courierName: fulfillmentData.courierName,
+                courierTracking: fulfillmentData.courierTracking,
+              });
+              updated++;
+              details.push({ orderNumber: order.orderNumber, status: "updated", courierName: fulfillmentData.courierName, courierTracking: fulfillmentData.courierTracking });
+            } else {
+              details.push({ orderNumber: order.orderNumber, status: "no_fulfillment_tracking" });
+            }
+          } catch (err: any) {
+            details.push({ orderNumber: order.orderNumber, status: "error", error: err.message });
+          }
+        });
+
+        await Promise.all(batchPromises);
+
+        if (i + batchSize < bookedWithoutTracking.length) {
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+
+      console.log(`[Admin] Backfill booked tracking: ${updated}/${bookedWithoutTracking.length} updated for merchant ${merchantId}`);
+      res.json({
+        success: true,
+        total: bookedWithoutTracking.length,
+        updated,
+        details,
+      });
+    } catch (error: any) {
+      console.error("[Admin] Backfill booked tracking failed:", error);
+      res.status(500).json({ message: "Backfill failed", error: error.message });
+    }
+  });
+
   // ============================================
   // BULK CANCELLATION JOB ENDPOINTS
   // ============================================

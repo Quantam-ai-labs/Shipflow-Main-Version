@@ -222,6 +222,15 @@ interface ShopifyOrder {
   note: string | null;
   note_attributes: Array<{ name: string; value: string }>;
   metafields?: ShopifyOrderMetafield[];
+  fulfillments?: Array<{
+    id: number;
+    status: string;
+    tracking_number: string | null;
+    tracking_numbers: string[];
+    tracking_company: string | null;
+    tracking_url: string | null;
+    tracking_urls: string[];
+  }>;
 }
 
 interface ShopifyOrdersResponse {
@@ -881,7 +890,7 @@ export class ShopifyService {
       for (let i = 0; i < pendingUpdates.length; i += PARALLEL_UPDATE_SIZE) {
         const batch = pendingUpdates.slice(i, i + PARALLEL_UPDATE_SIZE);
         const updatePromises = batch.map(async (pending) => {
-          const { existingOrderId, updateData, initialWorkflowStatus, shopifyOrder, transformedOrder } = pending;
+          const { existingOrderId, updateData, initialWorkflowStatus, shopifyOrder, transformedOrder, hasCourierStatus } = pending;
 
           const isPrepaid = transformedOrder.paymentMethod === 'prepaid';
           const existingOrder = existingOrdersById.get(existingOrderId);
@@ -889,6 +898,11 @@ export class ShopifyService {
             updateData.codRemaining = "0";
             updateData.prepaidAmount = transformedOrder.totalAmount;
             updateData.codPaymentStatus = "PAID";
+          }
+
+          if (!hasCourierStatus && existingOrder && !existingOrder.courierTracking && transformedOrder.courierTracking) {
+            updateData.courierName = transformedOrder.courierName;
+            updateData.courierTracking = transformedOrder.courierTracking;
           }
 
           await storage.updateOrder(merchantId, existingOrderId, updateData);
@@ -917,6 +931,12 @@ export class ShopifyService {
                   bookingStatus: 'BOOKED',
                   bookedAt: existingOrder.bookedAt || now,
                 };
+
+                if (!hasCourierStatus && transformedOrder.courierTracking) {
+                  bookedFields.courierName = transformedOrder.courierName;
+                  bookedFields.courierTracking = transformedOrder.courierTracking;
+                }
+
                 await storage.updateOrder(merchantId, existingOrderId, bookedFields);
 
                 await transitionOrder({
@@ -969,6 +989,46 @@ export class ShopifyService {
     return 'NEW';
   }
 
+  extractFulfillmentData(shopifyOrder: ShopifyOrder): { courierName: string | null; courierTracking: string | null; shopifyFulfillmentId: string | null } {
+    const fulfillments = shopifyOrder.fulfillments;
+    if (!fulfillments || fulfillments.length === 0) {
+      return { courierName: null, courierTracking: null, shopifyFulfillmentId: null };
+    }
+
+    const activeFulfillments = fulfillments.filter(f => f.status !== 'cancelled');
+    if (activeFulfillments.length === 0) {
+      return { courierName: null, courierTracking: null, shopifyFulfillmentId: null };
+    }
+
+    const withTracking = activeFulfillments.find(f =>
+      f.tracking_number || (f.tracking_numbers && f.tracking_numbers.length > 0)
+    );
+    const active = withTracking || activeFulfillments[0];
+
+    const trackingNumber = active.tracking_number || (active.tracking_numbers?.length > 0 ? active.tracking_numbers[0] : null);
+    if (!trackingNumber) {
+      return { courierName: null, courierTracking: null, shopifyFulfillmentId: String(active.id) };
+    }
+
+    const company = (active.tracking_company || '').toLowerCase().trim();
+    let courierName: string | null = null;
+    if (company.includes('leopard')) courierName = 'Leopards Courier';
+    else if (company.includes('postex') || company.includes('post ex')) courierName = 'PostEx';
+    else if (company.includes('tcs')) courierName = 'TCS';
+    else if (company.includes('trax')) courierName = 'Trax';
+    else if (company.includes('blue') && company.includes('ex')) courierName = 'BlueEx';
+    else if (company.includes('rider')) courierName = 'Rider';
+    else if (company.includes('swyft')) courierName = 'Swyft';
+    else if (company.includes('m&p') || company.includes('mnp')) courierName = 'M&P';
+    else if (company) courierName = active.tracking_company;
+
+    return {
+      courierName,
+      courierTracking: trackingNumber,
+      shopifyFulfillmentId: String(active.id),
+    };
+  }
+
   transformOrderForStorage(shopifyOrder: ShopifyOrder): {
     shopifyOrderId: string;
     orderNumber: string;
@@ -997,6 +1057,7 @@ export class ShopifyService {
     orderDate: Date;
     courierName: string | null;
     courierTracking: string | null;
+    shopifyFulfillmentId: string | null;
     totalQuantity: number;
     landingSite: string | null;
     referringSite: string | null;
@@ -1149,6 +1210,8 @@ export class ShopifyService {
       shipmentStatus = 'CANCELLED';
     }
 
+    const fulfillmentData = this.extractFulfillmentData(shopifyOrder);
+
     return {
       shopifyOrderId: String(shopifyOrder.id),
       orderNumber: shopifyOrder.name,
@@ -1166,8 +1229,9 @@ export class ShopifyService {
       discountAmount: shopifyOrder.total_discounts,
       currency: shopifyOrder.currency,
       paymentMethod: isCod ? 'cod' : 'prepaid',
-      courierName: null,
-      courierTracking: null,
+      courierName: fulfillmentData.courierName,
+      courierTracking: fulfillmentData.courierTracking,
+      shopifyFulfillmentId: fulfillmentData.shopifyFulfillmentId,
       totalQuantity,
       itemSummary,
       paymentStatus,
