@@ -106,6 +106,7 @@ const NOTIFICATION_CATEGORY_MAP: Record<string, { category: string; resolvable: 
   conflict_detected:            { category: "confirmation", resolvable: true },
   robocall_exhausted:           { category: "confirmation", resolvable: true },
   hold_reminder:                { category: "confirmation", resolvable: true },
+  confirmation_failed:          { category: "confirmation", resolvable: true },
   shopify_writeback_failed:     { category: "other",        resolvable: false },
   urgent_cancellation_request:  { category: "chat",         resolvable: true },
   ai_urgent_request:            { category: "chat",         resolvable: true },

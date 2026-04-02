@@ -422,6 +422,23 @@ export async function processWhatsAppOrderResponse(
       metadata: { phoneNumber: normalizedPhone, waMessageBody: messageBody, conflict: result.conflict },
     });
   } catch (error: any) {
-    console.error(`${LOG} Error processing WhatsApp response:`, error.message);
+    console.error(
+      `${LOG} Error processing WhatsApp response — merchantId=${merchantId} orderId=${orderId} orderNumber=${orderNumber} phone=${phoneNumber} message="${messageBody?.slice(0, 80)}" error=${error.message}`,
+      error
+    );
+    // Notify the merchant so they can manually intervene — the customer's confirmation
+    // was received but could not be processed automatically.
+    try {
+      await createNotification({
+        merchantId,
+        type: "confirmation_failed",
+        title: `WhatsApp confirmation failed for #${orderNumber}`,
+        message: `Customer (${phoneNumber}) sent "${messageBody?.slice(0, 100)}" but automatic processing failed: ${error.message}. Please review and confirm/cancel the order manually.`,
+        orderId,
+        orderNumber,
+      });
+    } catch (notifErr: any) {
+      console.error(`${LOG} Failed to create confirmation_failed notification for #${orderNumber}:`, notifErr.message);
+    }
   }
 }

@@ -30,6 +30,34 @@ const LOG = "[WA-Processor]";
 const MAX_RETRIES = 3;
 const RETRY_DELAYS_MS = [5_000, 30_000, 120_000];
 
+// Common confirm/cancel signals (subset of what waOrderConfirmation uses) — used as a
+// safety guard to prevent AI from handling messages that look like order confirmations.
+const CONFIRM_CANCEL_SIGNALS = [
+  "confirm", "confirmed", "yes", "yep", "yeah", "yup", "yap", "ok", "okay", "sure",
+  "haan", "haa", "han", "ha", "ji", "ji haan", "ji han", "bilkul", "zaroor",
+  "alright", "proceed", "approved", "agree", "sahi hai", "theek hai", "thik hai",
+  "send kar do", "bej do", "bhej do", "اوکے", "ہاں", "جی", "جی ہاں", "بالکل",
+  "cancel", "cancelled", "no", "nope", "nah", "na", "nahi", "nahin", "nai", "nay",
+  "nahi chahiye", "mat bhejo", "cancel kar do", "cancel karo", "rok do",
+  "don't want", "dont want", "don't send", "dont send", "not interested",
+  "wapis", "stop", "band karo", "band kar do", "نہیں", "کینسل", "واپس", "بند",
+];
+
+/**
+ * Returns true if the message body matches a known confirm or cancel signal.
+ * Used as a safety guard: when no order record is found but the customer appears to
+ * be responding to an order confirmation prompt, we skip AI and send a neutral reply.
+ */
+function isConfirmOrCancelIntent(messageBody: string): boolean {
+  const lower = messageBody.toLowerCase().trim().replace(/[!.,؟?،]+$/g, "").trim();
+  return CONFIRM_CANCEL_SIGNALS.some(signal => {
+    if (signal.length <= 4) {
+      return lower === signal || new RegExp(`(?:^|\\s)${signal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`).test(lower);
+    }
+    return lower.includes(signal);
+  });
+}
+
 /** Thrown when a reaction is parked (target not found). Signals processWithRetry to NOT retry and NOT mark as processed. */
 class ReactionParkedError extends Error {
   constructor() { super("reaction_parked"); }
@@ -407,12 +435,29 @@ async function handleMessageEvent(rawEvent: WaRawEvent): Promise<void> {
   // ── Order confirmation (text/button only) ─────────────────────────────────
   const convId = saveResult?.convId ?? null;
   if (msgType === "text" || msgType === "button_reply") {
-    // triggerOrderConfirmation returns true if an order was found and handled.
-    // processWhatsAppOrderResponse already sends any necessary AI reply in that path.
-    // Only call AI auto-reply if there was NO matched order (general enquiry).
+    // triggerOrderConfirmation returns true if an order was matched (even if processing
+    // failed internally). Returns false ONLY when no order exists for this customer.
     const orderHandled = await triggerOrderConfirmation(resolvedMerchantId, phone, messageBody, message, waMessageId);
 
     if (!orderHandled) {
+      // ── Safety guard: if the message looks like a confirm/cancel intent, do NOT ──
+      // route to AI — send a neutral acknowledgement instead. This prevents the AI
+      // from falsely confirming or cancelling an order when no order record was found.
+      if (msgType === "button_reply" || isConfirmOrCancelIntent(messageBody)) {
+        const { sendWhatsAppMessage } = await import("./whatsappSendMessage");
+        const merchant = await storage.getMerchant(resolvedMerchantId).catch(() => null);
+        if (merchant?.waPhoneNumberId && merchant?.waAccessToken) {
+          sendWhatsAppMessage(
+            phone,
+            "Thank you for your response. Our team will process it shortly.",
+            merchant.waPhoneNumberId,
+            merchant.waAccessToken,
+          ).catch(() => {});
+        }
+        console.log(`${LOG} Confirm/cancel intent detected but no order found for ${phone} — sent safe acknowledgement, skipping AI`);
+        return;
+      }
+
       // ── AI auto-reply (only when message is not an order confirmation) ───
       const conv = convId ? await storage.getConversationById(convId).catch(() => null) : null;
       handleAiAutoReply(
@@ -527,8 +572,10 @@ async function reconcilePendingReactions(targetWaId: string): Promise<void> {
   }
 }
 
-// Returns true if an order was matched and handled (AI reply is sent inside processWhatsAppOrderResponse).
-// Returns false if no order was found — caller must trigger AI auto-reply separately.
+// Returns true if an order was matched (regardless of whether processing succeeded).
+// Returns false ONLY if no order was found for this customer — caller triggers AI auto-reply.
+// When an order is found but processing throws, we return true so AI is NOT triggered,
+// and a merchant notification is created inside processWhatsAppOrderResponse's catch block.
 async function triggerOrderConfirmation(
   merchantId: string,
   phone: string,
@@ -536,6 +583,8 @@ async function triggerOrderConfirmation(
   rawMessage: Record<string, any>,
   waMessageId: string,
 ): Promise<boolean> {
+  let matchedOrderNumber: string | null = null;
+  let matchedOrderId: string | null = null;
   try {
     const { processWhatsAppOrderResponse } = await import("./waOrderConfirmation");
     const merchant = await storage.getMerchant(merchantId);
@@ -562,6 +611,10 @@ async function triggerOrderConfirmation(
 
     if (!matchedOrder) return false;
 
+    // Order found — capture identifiers before processing in case of error
+    matchedOrderNumber = matchedOrder.orderNumber;
+    matchedOrderId = matchedOrder.id;
+
     await processWhatsAppOrderResponse(
       matchedOrder.merchantId,
       matchedOrder.id,
@@ -573,9 +626,28 @@ async function triggerOrderConfirmation(
       merchant?.waPhoneNumberId ?? undefined,
       merchant?.waAccessToken ?? undefined,
     );
+    // Return true — order was matched and processed (or processing failure was handled internally)
     return true;
   } catch (err: any) {
-    console.error(`${LOG} triggerOrderConfirmation error for ${phone}: ${err.message}`);
+    // Order was found but an unexpected error escaped processWhatsAppOrderResponse.
+    // Log with enough detail to diagnose the root cause.
+    console.error(
+      `${LOG} triggerOrderConfirmation UNEXPECTED error — merchantId=${merchantId} phone=${phone}` +
+      (matchedOrderNumber ? ` orderNumber=${matchedOrderNumber}` : "") +
+      (matchedOrderId ? ` orderId=${matchedOrderId}` : "") +
+      ` message="${messageBody?.slice(0, 80)}" error=${err.message}`,
+      err
+    );
+    // Return true so the AI fallback is NOT triggered — the merchant notification
+    // will have been created inside processWhatsAppOrderResponse's catch block if the
+    // error originated there. If it originated here (e.g. during DB lookup of the
+    // order), we return true conservatively to avoid false AI confirmations.
+    if (matchedOrderId) {
+      // An order was found — AI must not handle this
+      return true;
+    }
+    // Error happened before we could confirm an order exists — safe to let caller decide,
+    // but we still return false only when matchedOrderId is null (order lookup itself failed).
     return false;
   }
 }
