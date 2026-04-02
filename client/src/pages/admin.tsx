@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +27,7 @@ import {
   TrendingUp, Package, ShoppingCart, Truck, Server,
   BarChart3, ClipboardList, Crown, ArrowLeft, HardDrive, Cpu,
   Clock, Zap, Globe, ChevronRight, LogOut, Plus, Trash2, ExternalLink,
-  PenLine, KeyRound, Copy, Info, CircleCheck, CircleDot,
+  PenLine, KeyRound, Copy, Info, CircleCheck, CircleDot, DollarSign,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, queryClient as globalQueryClient } from "@/lib/queryClient";
@@ -39,6 +39,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { formatPkShortDate, formatPkDateTime } from "@/lib/dateFormat";
+
+const CostDashboard = lazy(() => import("@/pages/admin/cost-dashboard"));
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316", "#ec4899"];
 
@@ -1903,7 +1905,7 @@ export default function AdminPanel() {
       </div>
 
       <Tabs defaultValue="dashboard" className="w-full">
-        <TabsList className="grid w-full grid-cols-9" data-testid="admin-tabs">
+        <TabsList className="grid w-full grid-cols-10" data-testid="admin-tabs">
           <TabsTrigger value="dashboard" data-testid="tab-dashboard" className="text-xs sm:text-sm">
             <Activity className="w-4 h-4 mr-1 hidden sm:inline" />Dashboard
           </TabsTrigger>
@@ -1915,6 +1917,9 @@ export default function AdminPanel() {
           </TabsTrigger>
           <TabsTrigger value="analytics" data-testid="tab-analytics" className="text-xs sm:text-sm">
             <BarChart3 className="w-4 h-4 mr-1 hidden sm:inline" />Analytics
+          </TabsTrigger>
+          <TabsTrigger value="costs" data-testid="tab-costs" className="text-xs sm:text-sm">
+            <DollarSign className="w-4 h-4 mr-1 hidden sm:inline" />Costs
           </TabsTrigger>
           <TabsTrigger value="health" data-testid="tab-health" className="text-xs sm:text-sm">
             <Server className="w-4 h-4 mr-1 hidden sm:inline" />Health
@@ -1937,6 +1942,7 @@ export default function AdminPanel() {
         <TabsContent value="merchants" className="mt-6"><MerchantsTab /></TabsContent>
         <TabsContent value="users" className="mt-6"><UsersTab /></TabsContent>
         <TabsContent value="analytics" className="mt-6"><AnalyticsTab /></TabsContent>
+        <TabsContent value="costs" className="mt-6"><Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin" /></div>}><CostDashboard /></Suspense></TabsContent>
         <TabsContent value="health" className="mt-6"><HealthTab /></TabsContent>
         <TabsContent value="audit" className="mt-6"><AuditLogTab /></TabsContent>
         <TabsContent value="admins" className="mt-6"><SuperAdminsTab /></TabsContent>
