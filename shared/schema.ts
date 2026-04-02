@@ -2174,6 +2174,7 @@ export const robocallLogs = pgTable("robocall_logs", {
   attemptNumber: integer("attempt_number").default(1),
   status: varchar("status", { length: 50 }).notNull().default("Initiated"),
   dtmf: integer("dtmf"),
+  durationSeconds: integer("duration_seconds"),
   error: text("error"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

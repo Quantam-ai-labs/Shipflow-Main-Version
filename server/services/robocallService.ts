@@ -514,7 +514,8 @@ async function checkCallResponses(): Promise<void> {
         const statusLabel = CALL_STATUS_LABELS[smsData.voice_status] || `Status ${smsData.voice_status}`;
         const dtmfValue = smsData.voice_dtmf && smsData.voice_dtmf > 0 ? smsData.voice_dtmf : null;
 
-        await storage.updateRobocallLog(log.id, { status: statusLabel, dtmf: dtmfValue });
+        const voiceSecPoll = typeof smsData.voice_sec === "number" ? smsData.voice_sec : null;
+        await storage.updateRobocallLog(log.id, { status: statusLabel, dtmf: dtmfValue, ...(voiceSecPoll !== null ? { durationSeconds: voiceSecPoll } : {}) });
 
         if (!log.orderId) {
           await new Promise(r => setTimeout(r, 200));
@@ -668,7 +669,8 @@ export async function processIvrWebhook(body: any): Promise<{ success: boolean; 
   const voiceId = String(body.voice_id || "").trim();
   const dtmfRaw = parseInt(body.dtmf, 10);
   const voiceStatus = parseInt(body.voice_status, 10);
-  const voiceSec = parseInt(body.voice_sec, 10) || 0;
+  const voiceSecRaw = parseInt(body.voice_sec, 10);
+  const voiceSec = Number.isFinite(voiceSecRaw) && voiceSecRaw >= 0 && body.voice_sec !== undefined && body.voice_sec !== "" ? voiceSecRaw : null;
   const orderNumber = body.order_number || "";
   const callerIdRaw = body.caller_id || "";
   const vsName = body.vs_name || "";
@@ -704,7 +706,7 @@ export async function processIvrWebhook(body: any): Promise<{ success: boolean; 
     return { success: true, skipped: true };
   }
 
-  await storage.updateRobocallLog(log.id, { status: statusLabel, dtmf: dtmfValue });
+  await storage.updateRobocallLog(log.id, { status: statusLabel, dtmf: dtmfValue, ...(voiceSec !== null ? { durationSeconds: voiceSec } : {}) });
 
   if (!log.orderId) {
     console.log(`${LOG_PREFIX} [IVR-WEBHOOK] Call ${voiceId} has no orderId — log updated, no order action`);

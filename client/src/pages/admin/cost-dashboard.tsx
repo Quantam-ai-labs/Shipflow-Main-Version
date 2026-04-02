@@ -130,6 +130,13 @@ interface CostEntry {
   entryType: string;
 }
 
+interface RoboCostDetail {
+  pkr: number;
+  answeredShort: number;
+  answeredLong: number;
+  answeredTotal: number;
+}
+
 interface CostSummary {
   merchantCosts: Record<string, { category: string; total: number }[]>;
   appCosts: Record<string, number>;
@@ -137,6 +144,8 @@ interface CostSummary {
   metaAdSpend: number;
   waCounts: Record<string, number>;
   roboCounts: Record<string, number>;
+  roboCosts: Record<string, RoboCostDetail>;
+  roboTotalPkr: number;
   merchantNames: Record<string, string>;
 }
 
@@ -386,6 +395,11 @@ export default function CostDashboard() {
               {summaryLoading ? <Skeleton className="h-8 w-28" /> : formatUSD(grandTotal)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">all costs combined</p>
+            {!summaryLoading && (summary?.roboTotalPkr || 0) > 0 && (
+              <p className="text-xs text-orange-500 mt-1 font-medium" data-testid="text-robo-total-pkr">
+                + Rs {(summary?.roboTotalPkr || 0).toLocaleString()} RoboCall
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -403,42 +417,69 @@ export default function CostDashboard() {
               <div className="space-y-2 py-4">
                 {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
               </div>
-            ) : Object.keys(merchantCosts).length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8" data-testid="empty-merchant-costs">No merchant cost entries yet</p>
-            ) : (
-              <div className="space-y-3">
-                {Object.entries(merchantCosts).map(([merchantId, cats]) => {
-                  const total = cats.reduce((s, c) => s + c.total, 0);
-                  const waCount = summary?.waCounts[merchantId] || 0;
-                  const roboCount = summary?.roboCounts[merchantId] || 0;
-                  return (
-                    <div key={merchantId} className="border rounded-lg p-4" data-testid={`merchant-cost-row-${merchantId}`}>
-                      <div className="flex items-center justify-between gap-4 mb-3">
-                        <div>
-                          <p className="font-medium">{merchantNames[merchantId] || merchantId}</p>
-                          <p className="text-xs text-muted-foreground">{merchantId}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-lg">{formatUSD(total)}</p>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            <span>{waCount} WA msgs</span>
-                            <span>{roboCount} calls</span>
+            ) : (() => {
+              const allMerchantIds = Array.from(new Set([
+                ...Object.keys(merchantCosts),
+                ...Object.keys(summary?.roboCosts || {}),
+                ...Object.keys(summary?.waCounts || {}),
+                ...Object.keys(summary?.roboCounts || {}),
+              ])).filter(id => !!merchantNames[id] || !!merchantCosts[id]);
+              if (allMerchantIds.length === 0) {
+                return <p className="text-sm text-muted-foreground text-center py-8" data-testid="empty-merchant-costs">No merchant cost entries yet</p>;
+              }
+              return (
+                <div className="space-y-3">
+                  {allMerchantIds.map((merchantId) => {
+                    const cats = merchantCosts[merchantId] || [];
+                    const total = cats.reduce((s, c) => s + c.total, 0);
+                    const waCount = summary?.waCounts[merchantId] || 0;
+                    const roboCount = summary?.roboCounts[merchantId] || 0;
+                    const roboCostDetail = summary?.roboCosts?.[merchantId];
+                    return (
+                      <div key={merchantId} className="border rounded-lg p-4" data-testid={`merchant-cost-row-${merchantId}`}>
+                        <div className="flex items-center justify-between gap-4 mb-3">
+                          <div>
+                            <p className="font-medium">{merchantNames[merchantId] || merchantId}</p>
+                            <p className="text-xs text-muted-foreground">{merchantId}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-lg">{formatUSD(total)}</p>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              <span>{waCount} WA msgs</span>
+                              <span>{roboCount} calls</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {cats.map(c => (
-                          <div key={c.category} className="flex items-center gap-1.5 bg-muted/50 rounded px-2 py-1">
-                            <Badge variant="outline" className="text-xs">{getCategoryLabel(c.category)}</Badge>
-                            <span className="text-xs font-medium">{formatUSD(c.total)}</span>
+                        {roboCostDetail && roboCostDetail.answeredTotal > 0 && (
+                          <div className="mt-2 flex items-center gap-2 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded px-3 py-1.5">
+                            <PhoneCall className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
+                            <span className="text-xs text-orange-700 dark:text-orange-400 font-medium">
+                              {(() => {
+                                const { pkr, answeredTotal, answeredShort, answeredLong } = roboCostDetail;
+                                const parts: string[] = [];
+                                if (answeredShort > 0) parts.push(`${answeredShort}×Rs2`);
+                                if (answeredLong > 0) parts.push(`${answeredLong}×Rs4`);
+                                return `Rs ${pkr.toLocaleString()} — ${answeredTotal} answered${parts.length > 0 ? ` (${parts.join(" + ")})` : ""}`;
+                              })()}
+                            </span>
                           </div>
-                        ))}
+                        )}
+                        {cats.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {cats.map(c => (
+                              <div key={c.category} className="flex items-center gap-1.5 bg-muted/50 rounded px-2 py-1">
+                                <Badge variant="outline" className="text-xs">{getCategoryLabel(c.category)}</Badge>
+                                <span className="text-xs font-medium">{formatUSD(c.total)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </CardContent>
         )}
       </Card>

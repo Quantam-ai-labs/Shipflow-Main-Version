@@ -18443,26 +18443,38 @@ export async function registerRoutes(
       const adSpendRows = await db.execute(adSpendQuery);
       const metaAdSpend = parseFloat((adSpendRows.rows[0] as any)?.total || "0");
 
-      // WA message counts per merchant
-      const waCountRows = await db.execute(sql`
-        SELECT merchant_id, COUNT(*)::int AS total
-        FROM wa_messages
-        GROUP BY merchant_id
-      `);
+      // WA message counts per merchant (with date range filtering)
+      let waBaseQuery = sql`SELECT merchant_id, COUNT(*)::int AS total FROM wa_messages WHERE 1=1`;
+      if (dateFrom) waBaseQuery = sql`${waBaseQuery} AND created_at >= ${dateFrom}::date`;
+      if (dateTo) waBaseQuery = sql`${waBaseQuery} AND created_at < (${dateTo}::date + interval '1 day')`;
+      waBaseQuery = sql`${waBaseQuery} GROUP BY merchant_id`;
+      const waCountRows = await db.execute(waBaseQuery);
       const waCounts: Record<string, number> = {};
       for (const row of waCountRows.rows as any[]) {
         waCounts[row.merchant_id] = row.total;
       }
 
-      // Robocall counts per merchant
-      const roboCountRows = await db.execute(sql`
-        SELECT merchant_id, COUNT(*)::int AS total
-        FROM robocall_logs
-        GROUP BY merchant_id
-      `);
+      // Robocall counts and auto-computed costs per merchant (with date range filtering)
+      let roboBaseQuery = sql`SELECT merchant_id, COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status = 'Answered' AND duration_seconds IS NOT NULL AND duration_seconds <= 30)::int AS answered_short,
+        COUNT(*) FILTER (WHERE status = 'Answered' AND duration_seconds IS NOT NULL AND duration_seconds > 30)::int AS answered_long
+        FROM robocall_logs WHERE 1=1`;
+      if (dateFrom) roboBaseQuery = sql`${roboBaseQuery} AND created_at >= ${dateFrom}::date`;
+      if (dateTo) roboBaseQuery = sql`${roboBaseQuery} AND created_at < (${dateTo}::date + interval '1 day')`;
+      roboBaseQuery = sql`${roboBaseQuery} GROUP BY merchant_id`;
+      const roboCountRows = await db.execute(roboBaseQuery);
       const roboCounts: Record<string, number> = {};
+      const roboCosts: Record<string, { pkr: number; answeredShort: number; answeredLong: number; answeredTotal: number }> = {};
       for (const row of roboCountRows.rows as any[]) {
         roboCounts[row.merchant_id] = row.total;
+        const answeredShort = row.answered_short || 0;
+        const answeredLong = row.answered_long || 0;
+        roboCosts[row.merchant_id] = {
+          pkr: answeredShort * 2 + answeredLong * 4,
+          answeredShort,
+          answeredLong,
+          answeredTotal: answeredShort + answeredLong,
+        };
       }
 
       // Merchant names
@@ -18472,11 +18484,15 @@ export async function registerRoutes(
         merchantNames[row.id] = row.name;
       }
 
+      const roboTotalPkr = Object.values(roboCosts).reduce((sum, r) => sum + r.pkr, 0);
+
       res.json({
         ...summary,
         metaAdSpend,
         waCounts,
         roboCounts,
+        roboCosts,
+        roboTotalPkr,
         merchantNames,
       });
     } catch (err: any) {
