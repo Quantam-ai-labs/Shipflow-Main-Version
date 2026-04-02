@@ -1013,6 +1013,7 @@ export class ShopifyService {
     );
     const active = withTracking || activeFulfillments[0];
 
+
     const trackingNumber = active.tracking_number || (active.tracking_numbers?.length > 0 ? active.tracking_numbers[0] : null);
     if (!trackingNumber) {
       return { courierName: null, courierTracking: null, shopifyFulfillmentId: String(active.id) };

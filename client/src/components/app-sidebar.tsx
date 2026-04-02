@@ -649,6 +649,14 @@ export function AppSidebar() {
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={location === "/admin/cost-dashboard"}>
+                    <Link href="/admin/cost-dashboard" data-testid="nav-cost-dashboard">
+                      <DollarSign className="w-4 h-4" />
+                      <span>Cost Dashboard</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

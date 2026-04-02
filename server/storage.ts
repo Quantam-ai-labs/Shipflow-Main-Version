@@ -57,6 +57,8 @@ import {
   type WaRawEvent, type InsertWaRawEvent,
   waFailedEvents,
   type WaFailedEvent,
+  platformCosts,
+  costRates,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte, lte } from "drizzle-orm";
@@ -314,6 +316,17 @@ export interface IStorage {
   createWaFailedEvent(data: { rawEventId: string; merchantId: string | null; eventType: string; webhookSource: string; payload: any; errorMessage: string; attemptCount: number }): Promise<WaFailedEvent>;
   getWaFailedEvents(merchantId?: string, limit?: number): Promise<WaFailedEvent[]>;
   resolveWaFailedEvent(id: number, resolvedBy: string): Promise<void>;
+
+  // Platform Costs
+  getPlatformCosts(options?: { merchantId?: string | null; category?: string; dateFrom?: string; dateTo?: string; entryType?: string }): Promise<any[]>;
+  createPlatformCost(data: any): Promise<any>;
+  updatePlatformCost(id: string, data: any): Promise<any>;
+  deletePlatformCost(id: string): Promise<void>;
+  getPlatformCostSummary(options?: { dateFrom?: string; dateTo?: string }): Promise<any>;
+
+  // Cost Rates
+  getCostRates(): Promise<any[]>;
+  upsertCostRate(data: any): Promise<any>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -2726,6 +2739,88 @@ export class DatabaseStorage implements IStorage {
     await db.update(waFailedEvents)
       .set({ resolvedAt: new Date(), resolvedBy })
       .where(eq(waFailedEvents.id, id));
+  }
+
+  async getPlatformCosts(options?: { merchantId?: string | null; category?: string; dateFrom?: string; dateTo?: string; entryType?: string }): Promise<any[]> {
+    const conditions: any[] = [];
+    if (options?.merchantId !== undefined) {
+      if (options.merchantId === null) {
+        conditions.push(isNull(platformCosts.merchantId));
+      } else {
+        conditions.push(eq(platformCosts.merchantId, options.merchantId));
+      }
+    }
+    if (options?.category) conditions.push(eq(platformCosts.category, options.category));
+    if (options?.entryType) conditions.push(eq(platformCosts.entryType, options.entryType));
+    if (options?.dateFrom) conditions.push(gte(platformCosts.date, new Date(options.dateFrom)));
+    if (options?.dateTo) {
+      const to = new Date(options.dateTo);
+      to.setHours(23, 59, 59, 999);
+      conditions.push(lte(platformCosts.date, to));
+    }
+    const query = db.select().from(platformCosts);
+    const result = conditions.length > 0
+      ? await query.where(and(...conditions)).orderBy(desc(platformCosts.date))
+      : await query.orderBy(desc(platformCosts.date));
+    return result;
+  }
+
+  async createPlatformCost(data: any): Promise<any> {
+    const [created] = await db.insert(platformCosts).values(data).returning();
+    return created;
+  }
+
+  async updatePlatformCost(id: string, data: any): Promise<any> {
+    const [updated] = await db.update(platformCosts).set({ ...data, updatedAt: new Date() }).where(eq(platformCosts.id, id)).returning();
+    return updated;
+  }
+
+  async deletePlatformCost(id: string): Promise<void> {
+    await db.delete(platformCosts).where(eq(platformCosts.id, id));
+  }
+
+  async getPlatformCostSummary(options?: { dateFrom?: string; dateTo?: string }): Promise<any> {
+    const conditions: any[] = [];
+    if (options?.dateFrom) conditions.push(gte(platformCosts.date, new Date(options.dateFrom)));
+    if (options?.dateTo) {
+      const to = new Date(options.dateTo);
+      to.setHours(23, 59, 59, 999);
+      conditions.push(lte(platformCosts.date, to));
+    }
+    const allCosts = conditions.length > 0
+      ? await db.select().from(platformCosts).where(and(...conditions))
+      : await db.select().from(platformCosts);
+
+    const merchantCosts: Record<string, { category: string; total: number }[]> = {};
+    const appCosts: Record<string, number> = {};
+    let grandTotal = 0;
+
+    for (const cost of allCosts) {
+      const amount = parseFloat(cost.amount as string) || 0;
+      grandTotal += amount;
+      if (cost.merchantId) {
+        if (!merchantCosts[cost.merchantId]) merchantCosts[cost.merchantId] = [];
+        const existing = merchantCosts[cost.merchantId].find(c => c.category === cost.category);
+        if (existing) existing.total += amount;
+        else merchantCosts[cost.merchantId].push({ category: cost.category, total: amount });
+      } else {
+        appCosts[cost.category] = (appCosts[cost.category] || 0) + amount;
+      }
+    }
+
+    return { merchantCosts, appCosts, grandTotal };
+  }
+
+  async getCostRates(): Promise<any[]> {
+    return db.select().from(costRates).orderBy(asc(costRates.category));
+  }
+
+  async upsertCostRate(data: any): Promise<any> {
+    const [result] = await db.insert(costRates)
+      .values({ ...data, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: costRates.category, set: { ...data, updatedAt: new Date() } })
+      .returning();
+    return result;
   }
 
   async seedDemoData(): Promise<void> {

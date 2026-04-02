@@ -173,6 +173,7 @@ const MetaAutomationRules = lazy(() => import("@/pages/meta/automation-rules"));
 const PricingPage = lazy(() => import("@/pages/pricing"));
 const ContactPage = lazy(() => import("@/pages/contact"));
 const LoadsheetPage = lazy(() => import("@/pages/loadsheet"));
+const CostDashboard = lazy(() => import("@/pages/admin/cost-dashboard"));
 function OnboardingBanner() {
   return (
     <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-between gap-2" data-testid="banner-onboarding">
@@ -369,6 +370,7 @@ function AppRoutes() {
       <Route path="/data-deletion" component={DataDeletion} />
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/admin" component={AdminPanel} />
+      <Route path="/admin/cost-dashboard" component={CostDashboard} />
       <Route component={NotFound} />
     </Switch>
     </Suspense>

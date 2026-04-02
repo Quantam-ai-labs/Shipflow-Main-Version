@@ -18383,5 +18383,160 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================
+  // ADMIN: COST DASHBOARD ROUTES
+  // ============================================
+
+  app.get("/api/admin/costs", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+      const { merchantId, category, dateFrom, dateTo, entryType } = req.query as Record<string, string>;
+      const opts: any = {};
+      if (merchantId === "null" || merchantId === "") opts.merchantId = null;
+      else if (merchantId) opts.merchantId = merchantId;
+      if (category) opts.category = category;
+      if (dateFrom) opts.dateFrom = dateFrom;
+      if (dateTo) opts.dateTo = dateTo;
+      if (entryType) opts.entryType = entryType;
+      const costs = await storage.getPlatformCosts(opts);
+      res.json(costs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/costs/summary", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+      const { dateFrom, dateTo } = req.query as Record<string, string>;
+
+      const summary = await storage.getPlatformCostSummary({ dateFrom, dateTo });
+
+      // Aggregate Meta API ad spend from ad_insights
+      let adSpendQuery = sql`SELECT COALESCE(SUM(CAST(spend AS NUMERIC)), 0)::float AS total FROM ad_insights WHERE 1=1`;
+      if (dateFrom) adSpendQuery = sql`${adSpendQuery} AND date >= ${dateFrom}`;
+      if (dateTo) adSpendQuery = sql`${adSpendQuery} AND date <= ${dateTo}`;
+      const adSpendRows = await db.execute(adSpendQuery);
+      const metaAdSpend = parseFloat((adSpendRows.rows[0] as any)?.total || "0");
+
+      // WA message counts per merchant
+      const waCountRows = await db.execute(sql`
+        SELECT merchant_id, COUNT(*)::int AS total
+        FROM wa_messages
+        GROUP BY merchant_id
+      `);
+      const waCounts: Record<string, number> = {};
+      for (const row of waCountRows.rows as any[]) {
+        waCounts[row.merchant_id] = row.total;
+      }
+
+      // Robocall counts per merchant
+      const roboCountRows = await db.execute(sql`
+        SELECT merchant_id, COUNT(*)::int AS total
+        FROM robocall_logs
+        GROUP BY merchant_id
+      `);
+      const roboCounts: Record<string, number> = {};
+      for (const row of roboCountRows.rows as any[]) {
+        roboCounts[row.merchant_id] = row.total;
+      }
+
+      // Merchant names
+      const merchantRows = await db.execute(sql`SELECT id, name, slug FROM merchants`);
+      const merchantNames: Record<string, string> = {};
+      for (const row of merchantRows.rows as any[]) {
+        merchantNames[row.id] = row.name;
+      }
+
+      res.json({
+        ...summary,
+        metaAdSpend,
+        waCounts,
+        roboCounts,
+        merchantNames,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/costs", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+      const { merchantId, category, amount, currency, description, date, entryType } = req.body;
+      if (!category || !amount) return res.status(400).json({ error: "category and amount are required" });
+      const cost = await storage.createPlatformCost({
+        merchantId: merchantId || null,
+        category,
+        amount: String(amount),
+        currency: currency || "USD",
+        description,
+        date: date ? new Date(date) : new Date(),
+        entryType: entryType || "manual",
+      });
+      res.json(cost);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/admin/costs/:id", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+      const { merchantId, category, amount, currency, description, date, entryType } = req.body;
+      const updated = await storage.updatePlatformCost(req.params.id, {
+        merchantId: merchantId || null,
+        category,
+        amount: String(amount),
+        currency: currency || "USD",
+        description,
+        date: date ? new Date(date) : undefined,
+        entryType,
+      });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/admin/costs/:id", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+      await storage.deletePlatformCost(req.params.id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/cost-rates", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+      const rates = await storage.getCostRates();
+      res.json(rates);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/admin/cost-rates", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+      const { category, ratePerUnit, unit, description } = req.body;
+      if (!category || ratePerUnit === undefined) return res.status(400).json({ error: "category and ratePerUnit are required" });
+      const rate = await storage.upsertCostRate({ category, ratePerUnit: String(ratePerUnit), unit: unit || "unit", description });
+      res.json(rate);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }

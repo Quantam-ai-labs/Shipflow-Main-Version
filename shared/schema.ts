@@ -2555,3 +2555,43 @@ export const waFailedEvents = pgTable("wa_failed_events", {
 ]);
 
 export type WaFailedEvent = typeof waFailedEvents.$inferSelect;
+
+// ============================================
+// PLATFORM COSTS (Admin cost tracking)
+// ============================================
+export const platformCosts = pgTable("platform_costs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").references(() => merchants.id, { onDelete: "cascade" }),
+  category: varchar("category", { length: 50 }).notNull(),
+  amount: decimal("amount", { precision: 14, scale: 4 }).notNull(),
+  currency: varchar("currency", { length: 10 }).default("USD").notNull(),
+  description: text("description"),
+  date: timestamp("date").notNull().defaultNow(),
+  entryType: varchar("entry_type", { length: 20 }).notNull().default("manual"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_platform_costs_merchant").on(table.merchantId),
+  index("idx_platform_costs_category").on(table.category),
+  index("idx_platform_costs_date").on(table.date),
+]);
+
+export const insertPlatformCostSchema = createInsertSchema(platformCosts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPlatformCost = z.infer<typeof insertPlatformCostSchema>;
+export type PlatformCost = typeof platformCosts.$inferSelect;
+
+// ============================================
+// COST RATES (Configurable per-unit rates)
+// ============================================
+export const costRates = pgTable("cost_rates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  category: varchar("category", { length: 50 }).notNull().unique(),
+  ratePerUnit: decimal("rate_per_unit", { precision: 14, scale: 8 }).notNull(),
+  unit: varchar("unit", { length: 50 }).notNull(),
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCostRateSchema = createInsertSchema(costRates).omit({ id: true, updatedAt: true });
+export type InsertCostRate = z.infer<typeof insertCostRateSchema>;
+export type CostRate = typeof costRates.$inferSelect;
