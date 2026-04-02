@@ -198,7 +198,7 @@ export async function autoTransitionOrder(merchantId: string, order: any, rawCou
         bookingStatus: null,
         bookingError: null,
         bookedAt: null,
-        shipmentStatus: 'Unfulfilled',
+        shipmentStatus: null,
         courierRawStatus: null,
         shopifyFulfillmentId: null,
       });

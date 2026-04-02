@@ -115,12 +115,6 @@ async function _transitionOrderInner(params: TransitionParams): Promise<Transiti
     ...extraData,
   };
 
-  if (order.workflowStatus === "BOOKED" && toStatus === "FULFILLED") {
-    const staleStatuses = ["Unfulfilled", "pending", null, undefined, ""];
-    if (staleStatuses.includes(order.shipmentStatus as any)) {
-      updateData.shipmentStatus = "IN_TRANSIT";
-    }
-  }
 
   const [updated] = await db.update(orders)
     .set(updateData)
@@ -249,17 +243,6 @@ export async function bulkTransitionOrders(params: {
       eq(orders.merchantId, merchantId)
     ));
 
-  if (toStatus === "FULFILLED") {
-    const staleStatuses = ["Unfulfilled", "pending", "", null];
-    const staleIds = eligible
-      .filter(o => o.workflowStatus === "BOOKED" && staleStatuses.includes(o.shipmentStatus as any))
-      .map(o => o.id);
-    if (staleIds.length > 0) {
-      await db.update(orders)
-        .set({ shipmentStatus: "IN_TRANSIT" } as any)
-        .where(and(inArray(orders.id, staleIds), eq(orders.merchantId, merchantId)));
-    }
-  }
 
   const auditEntries = eligible.map(o => ({
     orderId: o.id,

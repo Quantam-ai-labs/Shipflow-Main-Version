@@ -1274,7 +1274,7 @@ export default function Dashboard() {
                                   <p className="text-sm font-medium">PKR {order.totalAmount}</p>
                                   <p className="text-xs text-muted-foreground capitalize">{order.paymentMethod}</p>
                                 </div>
-                                {getStatusBadge(order.shipmentStatus || "Unfulfilled", order.workflowStatus)}
+                                {getStatusBadge(order.shipmentStatus || null, order.workflowStatus)}
                               </div>
                             </div>
                           </Link>

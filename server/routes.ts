@@ -1676,7 +1676,7 @@ export async function registerRoutes(
           bookingStatus: null,
           bookingError: null,
           bookedAt: null,
-          shipmentStatus: "Unfulfilled",
+          shipmentStatus: null,
           courierRawStatus: null,
           shopifyFulfillmentId: null,
         });
@@ -1907,7 +1907,7 @@ export async function registerRoutes(
               bookingStatus: null,
               bookingError: null,
               bookedAt: null,
-              shipmentStatus: "Unfulfilled",
+              shipmentStatus: null,
               courierRawStatus: null,
               shopifyFulfillmentId: null,
             });
@@ -10450,7 +10450,7 @@ export async function registerRoutes(
             bookingStatus: "BOOKED",
             bookingError: null,
             bookedAt: new Date(),
-            shipmentStatus: "BOOKED",
+            shipmentStatus: null,
           };
 
           if (ovr && originalOrder) {
@@ -15824,6 +15824,44 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/fix-artificial-shipment-statuses", isAuthenticated, async (req, res) => {
+    try {
+      const adminId = await requireSuperAdmin(req, res);
+      if (!adminId) return;
+
+      const result = await db.execute(sql`
+        UPDATE orders SET
+          shipment_status = courier_raw_status,
+          updated_at = NOW()
+        WHERE courier_tracking IS NOT NULL
+          AND courier_tracking != ''
+          AND courier_raw_status IS NOT NULL
+          AND courier_raw_status != ''
+          AND (shipment_status IS NULL OR shipment_status != courier_raw_status)
+        RETURNING id, order_number, shipment_status, courier_raw_status
+      `);
+
+      const clearNoRaw = await db.execute(sql`
+        UPDATE orders SET
+          shipment_status = NULL,
+          updated_at = NOW()
+        WHERE shipment_status IS NOT NULL
+          AND shipment_status IN ('Unfulfilled', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERY_FAILED', 'BOOKED', 'pending')
+        RETURNING id, order_number, shipment_status
+      `);
+
+      res.json({
+        success: true,
+        syncedToRaw: result.rows.length,
+        clearedArtificial: clearNoRaw.rows.length,
+        message: `Synced ${result.rows.length} orders to raw courier status, cleared ${clearNoRaw.rows.length} artificial statuses`,
+      });
+    } catch (error: any) {
+      console.error("[Admin] Fix artificial shipment statuses failed:", error);
+      res.status(500).json({ message: "Fix failed", error: error.message });
+    }
+  });
+
   app.post("/api/admin/backfill-booked-tracking", isAuthenticated, async (req, res) => {
     try {
       const adminId = await requireSuperAdmin(req, res);
@@ -16223,7 +16261,7 @@ export async function registerRoutes(
                 bookingStatus: null,
                 bookingError: null,
                 bookedAt: null,
-                shipmentStatus: "Unfulfilled",
+                shipmentStatus: null,
                 courierRawStatus: null,
               });
               await transitionOrder({

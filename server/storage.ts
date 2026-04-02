@@ -1175,7 +1175,7 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(orders.merchantId, merchantId),
           eq(orders.paymentMethod, "cod"),
-          eq(orders.shipmentStatus, "DELIVERED")
+          eq(orders.workflowStatus, "DELIVERED")
         )
       );
     

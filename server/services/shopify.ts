@@ -770,8 +770,8 @@ export class ShopifyService {
           createData.cancelReason = 'Cancelled in Shopify';
         }
         if (initialWorkflowStatus === 'BOOKED') {
-          if (!createData.shipmentStatus || createData.shipmentStatus === 'Unfulfilled' || createData.shipmentStatus === 'pending') {
-            createData.shipmentStatus = 'BOOKED';
+          if (!createData.shipmentStatus || createData.shipmentStatus === 'pending') {
+            createData.shipmentStatus = null;
           }
         }
         pendingNewOrders.push({ createData, initialWorkflowStatus, tags: transformedOrder.tags });
@@ -932,7 +932,7 @@ export class ShopifyService {
               const preBookedStates = ['NEW', 'PENDING', 'HOLD', 'READY_TO_SHIP'];
               if (existingOrder && preBookedStates.includes(existingOrder.workflowStatus)) {
                 const bookedFields: Record<string, any> = {
-                  shipmentStatus: 'BOOKED',
+                  shipmentStatus: null,
                   bookingStatus: 'BOOKED',
                   bookedAt: existingOrder.bookedAt || now,
                 };
@@ -1214,7 +1214,7 @@ export class ShopifyService {
     const utmParams = parseUtmParams(landingSite);
 
 
-    let shipmentStatus = 'Unfulfilled';
+    let shipmentStatus: string | null = null;
     if (shopifyOrder.cancelled_at) {
       shipmentStatus = 'CANCELLED';
     }

@@ -64,7 +64,6 @@ const STATUS_COLORS: Record<string, string> = {
   'READY_FOR_RETURN': "bg-orange-500/10 text-orange-400 border border-orange-500/20",
   'RETURN_IN_TRANSIT': "bg-red-500/10 text-red-400 border border-red-500/20",
   'CANCELLED': "bg-red-500/10 text-red-400 border border-red-500/20",
-  'Unfulfilled': "bg-muted text-muted-foreground",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -81,7 +80,6 @@ const STATUS_LABELS: Record<string, string> = {
   'READY_FOR_RETURN': 'Ready for Return',
   'RETURN_IN_TRANSIT': 'Return in Transit',
   'CANCELLED': 'Cancelled',
-  'Unfulfilled': 'Unfulfilled',
 };
 
 function getStatusColor(status: string): string {
@@ -100,15 +98,12 @@ const courierOptions = [
 ];
 
 function getStatusBadge(status: string | null, hasCourierTracking: boolean, rawStatus?: string | null, workflowStatus?: string | null) {
-  const postBookedStages = ['BOOKED', 'FULFILLED', 'DELIVERED', 'RETURN'];
-  const isPostBooked = workflowStatus && postBookedStages.includes(workflowStatus);
-  if (!hasCourierTracking && isPostBooked && (!status || status === 'Unfulfilled' || status === 'pending' || status === 'BOOKED' || status === 'Awaiting Pickup')) {
+  if (!status) {
     return <span className="text-muted-foreground text-xs" data-testid="badge-status-none">—</span>;
   }
-  const displayStatus = (!hasCourierTracking && (!status || status === 'pending')) ? 'Unfulfilled' : (status || 'Unfulfilled');
-  const colorClass = getStatusColor(displayStatus);
-  const label = getStatusLabel(displayStatus);
-  return <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-status-${displayStatus.toLowerCase().replace(/\s+/g, '-')}`} title={rawStatus ? `Courier: ${rawStatus}` : undefined}>{label}</Badge>;
+  const colorClass = getStatusColor(status);
+  const label = getStatusLabel(status);
+  return <Badge className={`${colorClass} text-xs font-medium`} data-testid={`badge-status-${status.toLowerCase().replace(/\s+/g, '-')}`} title={status}>{label}</Badge>;
 }
 
 interface OrdersResponse {
@@ -351,7 +346,7 @@ export default function Orders() {
       }
       if (!exportOrders.length) return;
       const csv = exportOrders.map((o: any) => 
-        `"${String(o.orderNumber || '').replace(/^#/, '')}","${o.customerName}","${o.customerPhone || ""}","${o.city || ""}","${(o.shippingAddress || "").replace(/"/g, '""')}","${o.totalQuantity || 1}","${o.totalAmount}","${(o.tags || []).join(";")}","${o.courierTracking ? getStatusLabel(o.shipmentStatus || "BOOKED") : (['BOOKED','FULFILLED','DELIVERED','RETURN'].includes(o.workflowStatus) ? "—" : "Unfulfilled")}","${(o.remark || "").replace(/"/g, '""')}"`
+        `"${String(o.orderNumber || '').replace(/^#/, '')}","${o.customerName}","${o.customerPhone || ""}","${o.city || ""}","${(o.shippingAddress || "").replace(/"/g, '""')}","${o.totalQuantity || 1}","${o.totalAmount}","${(o.tags || []).join(";")}","${o.shipmentStatus || "—"}","${(o.remark || "").replace(/"/g, '""')}"`
       ).join("\n");
       const header = "Order ID,Customer Name,Phone,City,Address,Qty,Amount,Tags,Status,Remark\n";
       const blob = new Blob([header + csv], { type: "text/csv" });
@@ -426,7 +421,7 @@ export default function Orders() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="Unfulfilled">Unfulfilled</SelectItem>
+              <SelectItem value="Unfulfilled">No Courier</SelectItem>
               {universalStatuses.map((s) => (
                 <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
               ))}
@@ -598,7 +593,7 @@ export default function Orders() {
                           className={statusFilter === "Unfulfilled" ? "bg-muted font-medium" : ""}
                           data-testid="status-option-unfulfilled"
                         >
-                          Unfulfilled
+                          No Courier
                         </DropdownMenuItem>
                         {universalStatuses.map((s) => (
                           <DropdownMenuItem 

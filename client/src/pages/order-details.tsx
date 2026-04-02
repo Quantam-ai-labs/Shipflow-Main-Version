@@ -122,9 +122,9 @@ function getShipmentStatusColor(status: string): string {
 }
 
 function getShipmentStatusBadge(normalizedStatus: string | null, rawStatus?: string | null) {
-  if (!normalizedStatus || normalizedStatus === "Unfulfilled" || normalizedStatus === "pending") return null;
+  if (!normalizedStatus) return null;
   const bg = getShipmentStatusColor(normalizedStatus);
-  const label = rawStatus || normalizedStatus.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+  const label = rawStatus || normalizedStatus;
   return <Badge variant="outline" className={bg} data-testid="badge-shipment-status">{label}</Badge>;
 }
 

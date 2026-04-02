@@ -533,21 +533,9 @@ export class WebhookHandler {
       }
 
       const fulfillmentStatus = payload.status || 'fulfilled';
-      let shipmentStatus = existingOrder.shipmentStatus;
-
-      if (fulfillmentStatus === 'success' || fulfillmentStatus === 'fulfilled') {
-        shipmentStatus = 'DELIVERED';
-      } else if (fulfillmentStatus === 'in_transit') {
-        shipmentStatus = 'IN_TRANSIT';
-      } else if (fulfillmentStatus === 'out_for_delivery') {
-        shipmentStatus = 'OUT_FOR_DELIVERY';
-      } else if (fulfillmentStatus === 'failure') {
-        shipmentStatus = 'DELIVERY_FAILED';
-      }
 
       await storage.updateOrder(merchantId, existingOrder.id, {
         fulfillmentStatus: fulfillmentStatus === 'success' ? 'fulfilled' : fulfillmentStatus,
-        shipmentStatus,
         lastWebhookAt: new Date(),
       });
 
