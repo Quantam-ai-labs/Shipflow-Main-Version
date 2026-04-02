@@ -1,10 +1,24 @@
 import OpenAI from "openai";
 import { pool } from "../db";
+import { storage } from "../storage";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
+
+function logAiUsage(response: any, merchantId: string | null, service: string, model: string) {
+  if (response?.usage) {
+    storage.createAiUsageLog({
+      merchantId,
+      service,
+      model,
+      promptTokens: response.usage.prompt_tokens,
+      completionTokens: response.usage.completion_tokens,
+      totalTokens: response.usage.total_tokens,
+    });
+  }
+}
 
 const DB_SCHEMA_CONTEXT = `
 You are 1SOL.AI AI, an analytics assistant for a logistics & marketing SaaS platform used by Shopify merchants in Pakistan.
@@ -512,6 +526,8 @@ If the question cannot be answered with a SQL query, respond:
     max_completion_tokens: 8192,
   });
 
+  logAiUsage(sqlGenResponse, merchantId, "ai_insights_sql_gen", "gpt-4o");
+
   const sqlResult = JSON.parse(sqlGenResponse.choices[0]?.message?.content || "{}");
 
   if (!sqlResult.sql) {
@@ -544,6 +560,8 @@ Fix the query. Ensure it includes merchant_id = $1 and LIMIT. Use the EXAMPLE QU
       response_format: { type: "json_object" },
       max_completion_tokens: 8192,
     });
+
+    logAiUsage(retryResponse, merchantId, "ai_insights_sql_retry", "gpt-4o");
 
     const retryResult = JSON.parse(retryResponse.choices[0]?.message?.content || "{}");
     if (!retryResult.sql) {
@@ -583,6 +601,8 @@ Respond in JSON: { "sql": "broader query", "explanation": "what was wrong and wh
         max_completion_tokens: 8192,
       });
 
+      logAiUsage(retryResponse, merchantId, "ai_insights_sql_broaden", "gpt-4o");
+
       const retryResult = JSON.parse(retryResponse.choices[0]?.message?.content || "{}");
       if (retryResult.sql) {
         const retryData = await executeReadOnlyQuery(retryResult.sql, [merchantId]);
@@ -618,6 +638,8 @@ Current USD to PKR rate: ${dollarRate}${languageInstruction}`
     ],
     max_completion_tokens: 8192,
   });
+
+  logAiUsage(formatResponse, merchantId, "ai_insights_format", "gpt-4o");
 
   return {
     answer: formatResponse.choices[0]?.message?.content || "No response generated.",
@@ -682,6 +704,8 @@ Respond in JSON: { "sql": "SELECT ..." }`
         max_completion_tokens: 8192,
       });
 
+      logAiUsage(sqlGenResponse, merchantId, "insights_sql_gen", "gpt-4o");
+
       const sqlResult = JSON.parse(sqlGenResponse.choices[0]?.message?.content || "{}");
       if (!sqlResult.sql) continue;
 
@@ -711,6 +735,7 @@ Respond in JSON: { "sql": "SELECT ..." }`
             response_format: { type: "json_object" },
             max_completion_tokens: 8192,
           });
+          logAiUsage(retryResponse, merchantId, "insights_sql_retry", "gpt-4o");
           const retryResult = JSON.parse(retryResponse.choices[0]?.message?.content || "{}");
           if (retryResult.sql) {
             try {
@@ -754,6 +779,8 @@ Max 4 metrics. Use PKR for currency. Dollar rate: ${dollarRate}.`
         response_format: { type: "json_object" },
         max_completion_tokens: 8192,
       });
+
+      logAiUsage(formatResponse, merchantId, "insights_format", "gpt-4o");
 
       const formatted = JSON.parse(formatResponse.choices[0]?.message?.content || "{}");
       results.push({
@@ -835,6 +862,8 @@ Use PKR for currency (USD rate: ${dollarRate}). Be direct and specific. Max 300 
     ],
     max_completion_tokens: 8192,
   });
+
+  logAiUsage(response, merchantId, "quick_strategy", "gpt-4o");
 
   return response.choices[0]?.message?.content || "Unable to generate strategy at this time.";
 }

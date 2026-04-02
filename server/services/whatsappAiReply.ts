@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { db } from "../db";
 import { merchants, products, waConversations, waMessages, orders, complaints } from "@shared/schema";
+import { storage } from "../storage";
 import { eq, and, desc, or, ilike, sql } from "drizzle-orm";
 import { normalizePakistaniPhone } from "../utils/phone";
 import { buildTrackingLink } from "../utils/integrations/whatsapp/variables";
@@ -401,6 +402,17 @@ ${conversationHistory ? `RECENT CONVERSATION:\n${conversationHistory}\n` : ""}`;
       temperature: 0.3,
       response_format: { type: "json_object" },
     });
+
+    if (response.usage) {
+      storage.createAiUsageLog({
+        merchantId,
+        service: "whatsapp_ai_reply",
+        model: "gpt-4o-mini",
+        promptTokens: response.usage.prompt_tokens,
+        completionTokens: response.usage.completion_tokens,
+        totalTokens: response.usage.total_tokens,
+      });
+    }
 
     const rawContent = response.choices?.[0]?.message?.content?.trim() || "";
 

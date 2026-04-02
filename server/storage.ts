@@ -59,6 +59,7 @@ import {
   type WaFailedEvent,
   platformCosts,
   costRates,
+  aiUsageLogs,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, ilike, sql, count, inArray, isNull, isNotNull, gte, lte } from "drizzle-orm";
@@ -327,6 +328,10 @@ export interface IStorage {
   // Cost Rates
   getCostRates(): Promise<any[]>;
   upsertCostRate(data: any): Promise<any>;
+
+  // AI Usage Logs
+  createAiUsageLog(data: { merchantId?: string | null; service: string; model?: string; promptTokens?: number; completionTokens?: number; totalTokens?: number }): Promise<void>;
+  getAiUsageStats(options?: { dateFrom?: string; dateTo?: string }): Promise<{ totalTokens: number; byMerchant: Record<string, number> }>;
 
   // Seed
   seedDemoData(): Promise<void>;
@@ -2821,6 +2826,52 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({ target: costRates.category, set: { ...data, updatedAt: new Date() } })
       .returning();
     return result;
+  }
+
+  async createAiUsageLog(data: { merchantId?: string | null; service: string; model?: string; promptTokens?: number; completionTokens?: number; totalTokens?: number }): Promise<void> {
+    try {
+      await db.insert(aiUsageLogs).values({
+        merchantId: data.merchantId || null,
+        service: data.service,
+        model: data.model || null,
+        promptTokens: data.promptTokens || 0,
+        completionTokens: data.completionTokens || 0,
+        totalTokens: data.totalTokens || 0,
+      });
+    } catch (err: any) {
+      console.error("[AiUsageLog] Failed to log AI usage:", err.message);
+    }
+  }
+
+  async getAiUsageStats(options?: { dateFrom?: string; dateTo?: string }): Promise<{ totalTokens: number; byMerchant: Record<string, number> }> {
+    const conditions: any[] = [];
+    if (options?.dateFrom) conditions.push(gte(aiUsageLogs.createdAt, new Date(options.dateFrom)));
+    if (options?.dateTo) {
+      const to = new Date(options.dateTo);
+      to.setHours(23, 59, 59, 999);
+      conditions.push(lte(aiUsageLogs.createdAt, to));
+    }
+
+    const rows = conditions.length > 0
+      ? await db.select({
+          merchantId: aiUsageLogs.merchantId,
+          tokens: sql<number>`COALESCE(SUM(${aiUsageLogs.totalTokens}), 0)::int`,
+        }).from(aiUsageLogs).where(and(...conditions)).groupBy(aiUsageLogs.merchantId)
+      : await db.select({
+          merchantId: aiUsageLogs.merchantId,
+          tokens: sql<number>`COALESCE(SUM(${aiUsageLogs.totalTokens}), 0)::int`,
+        }).from(aiUsageLogs).groupBy(aiUsageLogs.merchantId);
+
+    let totalTokens = 0;
+    const byMerchant: Record<string, number> = {};
+    for (const row of rows) {
+      totalTokens += row.tokens;
+      if (row.merchantId) {
+        byMerchant[row.merchantId] = row.tokens;
+      }
+    }
+
+    return { totalTokens, byMerchant };
   }
 
   async seedDemoData(): Promise<void> {

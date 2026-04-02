@@ -2558,6 +2558,28 @@ export const waFailedEvents = pgTable("wa_failed_events", {
 export type WaFailedEvent = typeof waFailedEvents.$inferSelect;
 
 // ============================================
+// AI USAGE LOGS (Token tracking for cost auto-calculation)
+// ============================================
+export const aiUsageLogs = pgTable("ai_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  merchantId: varchar("merchant_id").references(() => merchants.id, { onDelete: "cascade" }),
+  service: varchar("service", { length: 50 }).notNull(),
+  model: varchar("model", { length: 100 }),
+  promptTokens: integer("prompt_tokens").default(0),
+  completionTokens: integer("completion_tokens").default(0),
+  totalTokens: integer("total_tokens").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_ai_usage_logs_merchant").on(table.merchantId),
+  index("idx_ai_usage_logs_service").on(table.service),
+  index("idx_ai_usage_logs_created").on(table.createdAt),
+]);
+
+export const insertAiUsageLogSchema = createInsertSchema(aiUsageLogs).omit({ id: true, createdAt: true });
+export type InsertAiUsageLog = z.infer<typeof insertAiUsageLogSchema>;
+export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
+
+// ============================================
 // PLATFORM COSTS (Admin cost tracking)
 // ============================================
 export const platformCosts = pgTable("platform_costs", {

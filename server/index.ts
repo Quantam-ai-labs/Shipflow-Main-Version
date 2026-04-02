@@ -9,7 +9,7 @@ import { startConfirmationTimer } from "./services/confirmationTimer";
 import { startRobocallService } from "./services/robocallService";
 import { recoverPendingEvents } from "./services/waWebhookProcessor";
 import { db } from "./db";
-import { shopifyStores, users, courierAccounts, waAutomations } from "../shared/schema";
+import { shopifyStores, users, courierAccounts, waAutomations, costRates } from "../shared/schema";
 import { eq, sql, and, isNull, isNotNull, ilike, or } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
@@ -207,6 +207,29 @@ async function warmCourierCityCache() {
   }
 }
 
+async function seedDefaultCostRates() {
+  try {
+    const existing = await db.select().from(costRates);
+    const existingCategories = new Set(existing.map(r => r.category));
+    const defaults = [
+      { category: "whatsapp_api", ratePerUnit: "0.05", unit: "outbound message", description: "WhatsApp Business API per-message cost" },
+      { category: "ai_tokens", ratePerUnit: "0.002", unit: "1K tokens", description: "OpenAI API cost per 1,000 tokens (gpt-4o-mini)" },
+    ];
+    let seeded = 0;
+    for (const d of defaults) {
+      if (!existingCategories.has(d.category)) {
+        await db.insert(costRates).values({ ...d, updatedAt: new Date() });
+        seeded++;
+      }
+    }
+    if (seeded > 0) {
+      console.log(`[CostRates] Seeded ${seeded} default cost rate(s)`);
+    }
+  } catch (err: any) {
+    console.error("[CostRates] Failed to seed default rates:", err.message);
+  }
+}
+
 function scheduleStartupRecovery() {
   setTimeout(async () => {
     try {
@@ -294,6 +317,7 @@ function scheduleStartupRecovery() {
         }
       });
       seedSuperAdmin();
+      seedDefaultCostRates();
       normalizeLeopardsCourierNames();
       backfillAiNotificationCategories();
       patchShippingAutomationVariableOrder();

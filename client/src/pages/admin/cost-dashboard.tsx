@@ -137,6 +137,18 @@ interface RoboCostDetail {
   answeredTotal: number;
 }
 
+interface AutoComputed {
+  waApiCostUsd: number;
+  waApiCostsByMerchant: Record<string, number>;
+  waRate: number;
+  totalOutboundWa: number;
+  aiTokenCostUsd: number;
+  aiTokenCostsByMerchant: Record<string, number>;
+  aiRate: number;
+  aiTotalTokens: number;
+  aiTokensByMerchant: Record<string, number>;
+}
+
 interface CostSummary {
   merchantCosts: Record<string, { category: string; total: number }[]>;
   appCosts: Record<string, number>;
@@ -147,6 +159,7 @@ interface CostSummary {
   roboCosts: Record<string, RoboCostDetail>;
   roboTotalPkr: number;
   merchantNames: Record<string, string>;
+  autoComputed?: AutoComputed;
 }
 
 interface CostFormState {
@@ -299,28 +312,30 @@ export default function CostDashboard() {
 
   const merchantCosts = summary?.merchantCosts || {};
   const appCosts = summary?.appCosts || {};
-  const grandTotal = (summary?.grandTotal || 0) + (summary?.metaAdSpend || 0);
+  const auto = summary?.autoComputed;
+  const metaAdSpend = summary?.metaAdSpend || 0;
   const merchantNames = summary?.merchantNames || {};
 
   const merchantTotalSum = Object.values(merchantCosts).reduce(
     (sum, cats) => sum + cats.reduce((s, c) => s + c.total, 0), 0
-  );
-  const appTotalSum = Object.values(appCosts).reduce((s, v) => s + v, 0) + (summary?.metaAdSpend || 0);
+  ) + (auto?.waApiCostUsd || 0) + (auto?.aiTokenCostUsd || 0);
+  const appTotalSum = Object.values(appCosts).reduce((s, v) => s + v, 0) + metaAdSpend;
+  const grandTotal = (summary?.grandTotal || 0) + metaAdSpend + (auto?.waApiCostUsd || 0) + (auto?.aiTokenCostUsd || 0);
 
   const appCostChartData = ALL_CATEGORIES
-    .filter(c => appCosts[c.value] || (c.value === "meta_api" && (summary?.metaAdSpend || 0) > 0))
+    .filter(c => appCosts[c.value] || (c.value === "meta_api" && metaAdSpend > 0))
     .map(c => ({
       name: c.label,
       value: c.value === "meta_api"
-        ? (appCosts[c.value] || 0) + (summary?.metaAdSpend || 0)
+        ? (appCosts[c.value] || 0) + metaAdSpend
         : (appCosts[c.value] || 0),
     }))
     .filter(d => d.value > 0);
 
   const grandTotalChartData = [
     { name: "Merchant Costs", value: merchantTotalSum },
-    { name: "App Costs", value: appTotalSum - (summary?.metaAdSpend || 0) },
-    { name: "Meta Ad Spend", value: summary?.metaAdSpend || 0 },
+    { name: "App Costs", value: appTotalSum - metaAdSpend },
+    { name: "Meta Ad Spend", value: metaAdSpend },
   ].filter(d => d.value > 0);
 
   return (
@@ -377,6 +392,11 @@ export default function CostDashboard() {
               {summaryLoading ? <Skeleton className="h-8 w-28" /> : formatUSD(merchantTotalSum)}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">{Object.keys(merchantCosts).length} merchants</p>
+            {!summaryLoading && (auto?.waApiCostUsd || 0) + (auto?.aiTokenCostUsd || 0) > 0 && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-0.5 font-medium" data-testid="text-auto-computed-label">
+                incl. auto: WA {formatUSD(auto?.waApiCostUsd || 0)} + AI {formatUSD(auto?.aiTokenCostUsd || 0)}
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -423,6 +443,8 @@ export default function CostDashboard() {
                 ...Object.keys(summary?.roboCosts || {}),
                 ...Object.keys(summary?.waCounts || {}),
                 ...Object.keys(summary?.roboCounts || {}),
+                ...Object.keys(auto?.waApiCostsByMerchant || {}),
+                ...Object.keys(auto?.aiTokenCostsByMerchant || {}),
               ])).filter(id => !!merchantNames[id] || !!merchantCosts[id]);
               if (allMerchantIds.length === 0) {
                 return <p className="text-sm text-muted-foreground text-center py-8" data-testid="empty-merchant-costs">No merchant cost entries yet</p>;
@@ -431,8 +453,12 @@ export default function CostDashboard() {
                 <div className="space-y-3">
                   {allMerchantIds.map((merchantId) => {
                     const cats = merchantCosts[merchantId] || [];
-                    const total = cats.reduce((s, c) => s + c.total, 0);
+                    const manualTotal = cats.reduce((s, c) => s + c.total, 0);
+                    const waCost = auto?.waApiCostsByMerchant[merchantId] || 0;
+                    const aiCost = auto?.aiTokenCostsByMerchant[merchantId] || 0;
+                    const total = manualTotal + waCost + aiCost;
                     const waCount = summary?.waCounts[merchantId] || 0;
+                    const aiTokens = auto?.aiTokensByMerchant[merchantId] || 0;
                     const roboCount = summary?.roboCounts[merchantId] || 0;
                     const roboCostDetail = summary?.roboCosts?.[merchantId];
                     return (
@@ -447,6 +473,7 @@ export default function CostDashboard() {
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
                               <span>{waCount} WA msgs</span>
                               <span>{roboCount} calls</span>
+                              {aiTokens > 0 && <span>{(aiTokens / 1000).toFixed(1)}K AI tokens</span>}
                             </div>
                           </div>
                         </div>
@@ -464,8 +491,22 @@ export default function CostDashboard() {
                             </span>
                           </div>
                         )}
-                        {cats.length > 0 && (
+                        {(cats.length > 0 || waCost > 0 || aiCost > 0) && (
                           <div className="flex flex-wrap gap-2 mt-2">
+                            {waCost > 0 && (
+                              <div className="flex items-center gap-1.5 bg-green-500/10 rounded px-2 py-1">
+                                <Badge variant="outline" className="text-xs border-green-500/30">WhatsApp API</Badge>
+                                <span className="text-xs font-medium">{formatUSD(waCost)}</span>
+                                <Badge className="text-[10px] px-1 py-0 bg-green-500/20 text-green-700 dark:text-green-400 hover:bg-green-500/20">Auto</Badge>
+                              </div>
+                            )}
+                            {aiCost > 0 && (
+                              <div className="flex items-center gap-1.5 bg-blue-500/10 rounded px-2 py-1">
+                                <Badge variant="outline" className="text-xs border-blue-500/30">AI Tokens</Badge>
+                                <span className="text-xs font-medium">{formatUSD(aiCost)}</span>
+                                <Badge className="text-[10px] px-1 py-0 bg-blue-500/20 text-blue-700 dark:text-blue-400 hover:bg-blue-500/20">Auto</Badge>
+                              </div>
+                            )}
                             {cats.map(c => (
                               <div key={c.category} className="flex items-center gap-1.5 bg-muted/50 rounded px-2 py-1">
                                 <Badge variant="outline" className="text-xs">{getCategoryLabel(c.category)}</Badge>
@@ -501,16 +542,21 @@ export default function CostDashboard() {
               <div className="grid lg:grid-cols-2 gap-5">
                 <div className="space-y-2">
                   {APP_CATEGORIES.map(cat => {
+                    const isAutoCategory = cat.value === "meta_api";
+                    const isManualOnly = cat.value === "replit" || cat.value === "computing" || cat.value === "server" || cat.value === "db" || cat.value === "agent";
                     const amount = cat.value === "meta_api"
-                      ? (appCosts[cat.value] || 0) + (summary?.metaAdSpend || 0)
+                      ? (appCosts[cat.value] || 0) + metaAdSpend
                       : (appCosts[cat.value] || 0);
                     return (
                       <div key={cat.value} className="flex items-center justify-between p-3 rounded-lg border" data-testid={`app-cost-row-${cat.value}`}>
                         <div className="flex items-center gap-2">
                           <cat.icon className="w-4 h-4 text-muted-foreground" />
                           <span className="text-sm font-medium">{cat.label}</span>
-                          {cat.value === "meta_api" && (summary?.metaAdSpend || 0) > 0 && (
-                            <Badge variant="secondary" className="text-xs">incl. ad spend</Badge>
+                          {isAutoCategory && metaAdSpend > 0 && (
+                            <Badge className="text-[10px] px-1 py-0 bg-green-500/20 text-green-700 dark:text-green-400 hover:bg-green-500/20">Auto</Badge>
+                          )}
+                          {isManualOnly && (
+                            <Badge variant="secondary" className="text-[10px] px-1 py-0">Manual</Badge>
                           )}
                         </div>
                         <span className="font-semibold text-sm">{formatUSD(amount)}</span>
@@ -559,11 +605,11 @@ export default function CostDashboard() {
                   </div>
                   <div className="flex items-center justify-between p-3 rounded-lg border bg-amber-500/5">
                     <span className="font-medium">App Costs</span>
-                    <span className="font-bold text-amber-500">{formatUSD(appTotalSum - (summary?.metaAdSpend || 0))}</span>
+                    <span className="font-bold text-amber-500">{formatUSD(appTotalSum - metaAdSpend)}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 rounded-lg border bg-purple-500/5">
                     <span className="font-medium">Meta Ad Spend</span>
-                    <span className="font-bold text-purple-500">{formatUSD(summary?.metaAdSpend || 0)}</span>
+                    <span className="font-bold text-purple-500">{formatUSD(metaAdSpend)}</span>
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between p-3 rounded-lg border-2 border-emerald-500/30 bg-emerald-500/5">

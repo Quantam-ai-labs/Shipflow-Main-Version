@@ -18443,11 +18443,15 @@ export async function registerRoutes(
       const adSpendRows = await db.execute(adSpendQuery);
       const metaAdSpend = parseFloat((adSpendRows.rows[0] as any)?.total || "0");
 
-      // WA message counts per merchant (with date range filtering)
-      let waBaseQuery = sql`SELECT merchant_id, COUNT(*)::int AS total FROM wa_messages WHERE 1=1`;
-      if (dateFrom) waBaseQuery = sql`${waBaseQuery} AND created_at >= ${dateFrom}::date`;
-      if (dateTo) waBaseQuery = sql`${waBaseQuery} AND created_at < (${dateTo}::date + interval '1 day')`;
-      waBaseQuery = sql`${waBaseQuery} GROUP BY merchant_id`;
+      // WA outbound message counts per merchant (with date range filtering)
+      // wa_messages has no merchant_id — join through wa_conversations
+      let waBaseQuery = sql`SELECT c.merchant_id, COUNT(*)::int AS total
+        FROM wa_messages m
+        JOIN wa_conversations c ON c.id = m.conversation_id
+        WHERE m.direction = 'outbound'`;
+      if (dateFrom) waBaseQuery = sql`${waBaseQuery} AND m.created_at >= ${dateFrom}::date`;
+      if (dateTo) waBaseQuery = sql`${waBaseQuery} AND m.created_at < (${dateTo}::date + interval '1 day')`;
+      waBaseQuery = sql`${waBaseQuery} GROUP BY c.merchant_id`;
       const waCountRows = await db.execute(waBaseQuery);
       const waCounts: Record<string, number> = {};
       for (const row of waCountRows.rows as any[]) {
@@ -18486,6 +18490,31 @@ export async function registerRoutes(
 
       const roboTotalPkr = Object.values(roboCosts).reduce((sum, r) => sum + r.pkr, 0);
 
+      // Auto-compute costs from rates
+      const rates = await storage.getCostRates();
+      const rateMap: Record<string, number> = {};
+      for (const r of rates) {
+        rateMap[r.category] = parseFloat(r.ratePerUnit) || 0;
+      }
+
+      // WA API cost: outbound messages * rate
+      const waRate = rateMap["whatsapp_api"] || 0;
+      const totalOutboundWa = Object.values(waCounts).reduce((s, v) => s + v, 0);
+      const waApiCostUsd = totalOutboundWa * waRate;
+      const waApiCostsByMerchant: Record<string, number> = {};
+      for (const [mid, cnt] of Object.entries(waCounts)) {
+        waApiCostsByMerchant[mid] = cnt * waRate;
+      }
+
+      // AI token cost from ai_usage_logs
+      const aiStats = await storage.getAiUsageStats({ dateFrom, dateTo });
+      const aiRate = rateMap["ai_tokens"] || 0;
+      const aiTokenCostUsd = (aiStats.totalTokens / 1000) * aiRate;
+      const aiTokenCostsByMerchant: Record<string, number> = {};
+      for (const [mid, tokens] of Object.entries(aiStats.byMerchant)) {
+        aiTokenCostsByMerchant[mid] = (tokens / 1000) * aiRate;
+      }
+
       res.json({
         ...summary,
         metaAdSpend,
@@ -18494,6 +18523,17 @@ export async function registerRoutes(
         roboCosts,
         roboTotalPkr,
         merchantNames,
+        autoComputed: {
+          waApiCostUsd,
+          waApiCostsByMerchant,
+          waRate,
+          totalOutboundWa,
+          aiTokenCostUsd,
+          aiTokenCostsByMerchant,
+          aiRate,
+          aiTotalTokens: aiStats.totalTokens,
+          aiTokensByMerchant: aiStats.byMerchant,
+        },
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
