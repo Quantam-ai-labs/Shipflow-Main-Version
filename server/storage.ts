@@ -2844,34 +2844,42 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAiUsageStats(options?: { dateFrom?: string; dateTo?: string }): Promise<{ totalTokens: number; byMerchant: Record<string, number> }> {
-    const conditions: any[] = [];
-    if (options?.dateFrom) conditions.push(gte(aiUsageLogs.createdAt, new Date(options.dateFrom)));
-    if (options?.dateTo) {
-      const to = new Date(options.dateTo);
-      to.setHours(23, 59, 59, 999);
-      conditions.push(lte(aiUsageLogs.createdAt, to));
-    }
-
-    const rows = conditions.length > 0
-      ? await db.select({
-          merchantId: aiUsageLogs.merchantId,
-          tokens: sql<number>`COALESCE(SUM(${aiUsageLogs.totalTokens}), 0)::int`,
-        }).from(aiUsageLogs).where(and(...conditions)).groupBy(aiUsageLogs.merchantId)
-      : await db.select({
-          merchantId: aiUsageLogs.merchantId,
-          tokens: sql<number>`COALESCE(SUM(${aiUsageLogs.totalTokens}), 0)::int`,
-        }).from(aiUsageLogs).groupBy(aiUsageLogs.merchantId);
-
-    let totalTokens = 0;
-    const byMerchant: Record<string, number> = {};
-    for (const row of rows) {
-      totalTokens += row.tokens;
-      if (row.merchantId) {
-        byMerchant[row.merchantId] = row.tokens;
+    try {
+      const conditions: any[] = [];
+      if (options?.dateFrom) conditions.push(gte(aiUsageLogs.createdAt, new Date(options.dateFrom)));
+      if (options?.dateTo) {
+        const to = new Date(options.dateTo);
+        to.setHours(23, 59, 59, 999);
+        conditions.push(lte(aiUsageLogs.createdAt, to));
       }
-    }
 
-    return { totalTokens, byMerchant };
+      const rows = conditions.length > 0
+        ? await db.select({
+            merchantId: aiUsageLogs.merchantId,
+            tokens: sql<number>`COALESCE(SUM(${aiUsageLogs.totalTokens}), 0)::int`,
+          }).from(aiUsageLogs).where(and(...conditions)).groupBy(aiUsageLogs.merchantId)
+        : await db.select({
+            merchantId: aiUsageLogs.merchantId,
+            tokens: sql<number>`COALESCE(SUM(${aiUsageLogs.totalTokens}), 0)::int`,
+          }).from(aiUsageLogs).groupBy(aiUsageLogs.merchantId);
+
+      let totalTokens = 0;
+      const byMerchant: Record<string, number> = {};
+      for (const row of rows) {
+        totalTokens += row.tokens;
+        if (row.merchantId) {
+          byMerchant[row.merchantId] = row.tokens;
+        }
+      }
+
+      return { totalTokens, byMerchant };
+    } catch (err: any) {
+      if (err?.message?.includes("does not exist")) {
+        console.warn("[AiUsageStats] ai_usage_logs table not found, returning zeros");
+        return { totalTokens: 0, byMerchant: {} };
+      }
+      throw err;
+    }
   }
 
   async seedDemoData(): Promise<void> {
