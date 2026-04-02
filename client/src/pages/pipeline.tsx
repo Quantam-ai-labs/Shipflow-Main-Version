@@ -2268,11 +2268,11 @@ export default function Pipeline() {
                         {order.shipmentStatus ? (
                           <Badge className={`text-xs ${getStatusBadgeColor(order.workflowStatus)}`}
                             data-testid={`badge-status-${order.id}`}
-                            title={order.shipmentStatus || undefined}>
-                            {truncateStatus(order.shipmentStatus || "Unknown")}
+                            title={order.shipmentStatus}>
+                            {order.shipmentStatus}
                           </Badge>
                         ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
                     </>

@@ -1215,9 +1215,6 @@ export class ShopifyService {
 
 
     let shipmentStatus: string | null = null;
-    if (shopifyOrder.cancelled_at) {
-      shipmentStatus = 'CANCELLED';
-    }
 
     const fulfillmentData = this.extractFulfillmentData(shopifyOrder);
 

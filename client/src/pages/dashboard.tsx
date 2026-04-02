@@ -242,7 +242,10 @@ function getStatusBadgeColor(workflowStatus: string | null | undefined): string 
   }
 }
 
-function getStatusBadge(status: string, workflowStatus?: string | null) {
+function getStatusBadge(status: string | null, workflowStatus?: string | null) {
+  if (!status) {
+    return <span className="text-muted-foreground text-xs">—</span>;
+  }
   const color = getStatusBadgeColor(workflowStatus);
   const label = truncateStatus(status);
 
