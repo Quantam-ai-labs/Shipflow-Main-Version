@@ -70,6 +70,29 @@ app.use((req, res, next) => {
   next();
 });
 
+async function normalizeLeopardsCourierNames() {
+  try {
+    const ordersResult = await db.execute(sql`
+      UPDATE orders SET courier_name = 'Leopards'
+      WHERE LOWER(courier_name) LIKE '%leopard%' AND courier_name != 'Leopards'
+    `);
+    const shipmentsResult = await db.execute(sql`
+      UPDATE shipments SET courier_name = 'Leopards'
+      WHERE LOWER(courier_name) LIKE '%leopard%' AND courier_name != 'Leopards'
+    `);
+    const codResult = await db.execute(sql`
+      UPDATE cod_reconciliation SET courier_name = 'Leopards'
+      WHERE LOWER(courier_name) LIKE '%leopard%' AND courier_name != 'Leopards'
+    `);
+    const totalUpdated = (ordersResult.rowCount ?? 0) + (shipmentsResult.rowCount ?? 0) + (codResult.rowCount ?? 0);
+    if (totalUpdated > 0) {
+      console.log(`[CourierNorm] Normalized 'Leopards Courier' → 'Leopards': orders=${ordersResult.rowCount ?? 0}, shipments=${shipmentsResult.rowCount ?? 0}, cod_reconciliation=${codResult.rowCount ?? 0}`);
+    }
+  } catch (err: any) {
+    console.error("[CourierNorm] Failed to normalize courier names:", err.message);
+  }
+}
+
 async function backfillAiNotificationCategories() {
   try {
     const { rows } = await db.execute<{ count: number }>(sql`
@@ -271,6 +294,7 @@ function scheduleStartupRecovery() {
         }
       });
       seedSuperAdmin();
+      normalizeLeopardsCourierNames();
       backfillAiNotificationCategories();
       patchShippingAutomationVariableOrder();
       startAutoSync();

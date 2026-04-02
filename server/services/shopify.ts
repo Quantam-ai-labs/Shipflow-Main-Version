@@ -1021,7 +1021,7 @@ export class ShopifyService {
 
     const company = (active.tracking_company || '').toLowerCase().trim();
     let courierName: string | null = null;
-    if (company.includes('leopard')) courierName = 'Leopards Courier';
+    if (company.includes('leopard')) courierName = 'Leopards';
     else if (company.includes('postex') || company.includes('post ex')) courierName = 'PostEx';
     else if (company.includes('tcs')) courierName = 'TCS';
     else if (company.includes('trax')) courierName = 'Trax';

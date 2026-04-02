@@ -14490,9 +14490,31 @@ export async function registerRoutes(
       `)).rows;
 
       const courierUsage = (await db.execute(sql`
-        SELECT courier_name AS courier, COUNT(*)::int AS count
-        FROM shipments WHERE courier_name IS NOT NULL
-        GROUP BY courier_name ORDER BY count DESC
+        SELECT
+          CASE
+            WHEN LOWER(cn) LIKE '%leopard%' THEN 'Leopards'
+            WHEN LOWER(cn) LIKE '%postex%' OR LOWER(cn) LIKE '%post ex%' THEN 'PostEx'
+            WHEN LOWER(cn) LIKE '%tcs%' THEN 'TCS'
+            WHEN LOWER(cn) LIKE '%trax%' THEN 'Trax'
+            WHEN LOWER(cn) LIKE '%blueex%' OR (LOWER(cn) LIKE '%blue%' AND LOWER(cn) LIKE '%ex%') THEN 'BlueEx'
+            WHEN LOWER(cn) LIKE '%rider%' THEN 'Rider'
+            WHEN LOWER(cn) LIKE '%swyft%' THEN 'Swyft'
+            WHEN LOWER(cn) LIKE '%m&p%' OR LOWER(cn) LIKE '%mnp%' THEN 'M&P'
+            ELSE cn
+          END AS courier,
+          COUNT(*)::int AS count
+        FROM (
+          SELECT o.id AS entity_id, COALESCE(o.courier_name, s.courier_name) AS cn
+          FROM orders o
+          LEFT JOIN shipments s ON s.order_id = o.id
+          WHERE COALESCE(o.courier_name, s.courier_name) IS NOT NULL
+          UNION
+          SELECT s2.id AS entity_id, s2.courier_name AS cn
+          FROM shipments s2
+          LEFT JOIN orders o2 ON o2.id = s2.order_id
+          WHERE o2.id IS NULL AND s2.courier_name IS NOT NULL
+        ) combined
+        GROUP BY 1 ORDER BY count DESC
       `)).rows;
 
       const merchantsByCity = (await db.execute(sql`
