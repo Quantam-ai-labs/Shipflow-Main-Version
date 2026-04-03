@@ -118,11 +118,20 @@ copy_table() {
   echo "OK"
 }
 
-# ── Step 1: Delete existing merchant from dev (CASCADE cleans all children) ───
+# ── Step 1: Delete existing merchant from dev by slug ────────────────────────
+# Dev and prod have independent UUID sequences, so the same merchant can exist
+# in both environments with the same slug but a different ID. We always delete
+# by slug so no stale dev record is left behind to cause a unique-key conflict.
 info "Removing existing '${MERCHANT_SLUG}' data from dev..."
-psql "$DATABASE_URL" -c "DELETE FROM merchants WHERE id = '${MID}';" -q \
-  || die "Failed to delete merchant from dev."
-ok "Cleared"
+DEV_MID=$(psql "$DATABASE_URL" -t -A \
+  -c "SELECT id FROM merchants WHERE slug = '${MERCHANT_SLUG}'" 2>/dev/null || true)
+if [ -n "$DEV_MID" ]; then
+  ok "Found existing dev merchant (id: ${DEV_MID}) — deleting via CASCADE..."
+  psql "$DATABASE_URL" -c "DELETE FROM merchants WHERE slug = '${MERCHANT_SLUG}';" -q \
+    || die "Failed to delete existing dev merchant."
+else
+  ok "No existing dev merchant for slug '${MERCHANT_SLUG}' — fresh insert."
+fi
 echo ""
 
 # ── Step 2: Copy all tables (parents before children for FK safety) ───────────
