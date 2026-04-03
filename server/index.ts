@@ -230,6 +230,24 @@ async function seedDefaultCostRates() {
   }
 }
 
+async function backfillFulfilledAt() {
+  try {
+    const result = await db.execute(sql`
+      UPDATE orders
+      SET fulfilled_at = dispatched_at
+      WHERE fulfilled_at IS NULL
+        AND dispatched_at IS NOT NULL
+        AND workflow_status IN ('FULFILLED', 'DELIVERED', 'RETURN')
+    `);
+    const n = result.rowCount ?? 0;
+    if (n > 0) {
+      console.log(`[FulfilledAtBackfill] Set fulfilled_at = dispatched_at for ${n} orders`);
+    }
+  } catch (err: any) {
+    console.error("[FulfilledAtBackfill] Failed:", err.message);
+  }
+}
+
 function scheduleStartupRecovery() {
   setTimeout(async () => {
     try {
@@ -320,6 +338,7 @@ function scheduleStartupRecovery() {
       seedDefaultCostRates();
       normalizeLeopardsCourierNames();
       backfillAiNotificationCategories();
+      backfillFulfilledAt();
       patchShippingAutomationVariableOrder();
       startAutoSync();
       setTimeout(() => startCourierSyncScheduler(), 5000);

@@ -138,8 +138,9 @@ interface ShipmentOrder {
 }
 
 function getAgingBadge(order: ShipmentOrder) {
-  if (!order.fulfilledAt) return <span className="text-muted-foreground/40 text-xs">—</span>;
-  const start = new Date(order.fulfilledAt).getTime();
+  const startDateStr = order.fulfilledAt ?? order.dispatchedAt ?? order.orderDate;
+  if (!startDateStr) return <span className="text-muted-foreground/40 text-xs">—</span>;
+  const start = new Date(startDateStr).getTime();
   const end =
     order.workflowStatus === "DELIVERED" && order.deliveredAt
       ? new Date(order.deliveredAt).getTime()
