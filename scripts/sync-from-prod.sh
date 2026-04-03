@@ -16,6 +16,9 @@
 # USAGE:
 #   bash scripts/sync-from-prod.sh
 #
+# NON-INTERACTIVE (skips confirmation prompt):
+#   printf 'YES\n' | bash scripts/sync-from-prod.sh
+#
 # WHAT IT DOES:
 #   - Dumps all merchant data from production (orders, settings, team members, etc.)
 #   - Wipes the dev database's merchant data
@@ -134,7 +137,7 @@ echo ""
 info "Wiping dev merchant data (TRUNCATE merchants CASCADE)..."
 
 psql "$DATABASE_URL" \
-  -c "SET session_replication_role = 'replica'; TRUNCATE merchants CASCADE; SET session_replication_role = 'DEFAULT';" \
+  -c "TRUNCATE merchants CASCADE;" \
   -q \
   || die "Failed to truncate dev merchant data."
 
