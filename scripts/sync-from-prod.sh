@@ -145,25 +145,49 @@ echo ""
 # ── Step 4: Restore production data into dev ──────────────────────────────────
 info "Restoring production data into dev database..."
 
-# pg_restore may emit warnings for excluded/skipped tables; that's expected.
-# We capture stderr and only surface real errors (non-zero exit on genuine failure).
-RESTORE_ERRORS=$(pg_restore \
+# Capture stderr to a temp file so we can show it on failure without
+# losing the exit code (bash subshell substitution swallows exit codes).
+RESTORE_STDERR_FILE="/tmp/pg_restore_stderr_$$.txt"
+trap 'rm -f "$DUMP_FILE" "$RESTORE_STDERR_FILE"; echo ""' EXIT
+
+set +e
+pg_restore \
   --no-owner \
   --no-acl \
   --data-only \
   --disable-triggers \
   -d "$DATABASE_URL" \
-  "$DUMP_FILE" 2>&1 || true)
+  "$DUMP_FILE" 2>"$RESTORE_STDERR_FILE"
+RESTORE_EXIT=$?
+set -e
 
-# Filter out expected/harmless messages
-REAL_ERRORS=$(echo "$RESTORE_ERRORS" | grep -v "^pg_restore: " | grep -v "^$" || true)
+if [ $RESTORE_EXIT -ne 0 ]; then
+  echo ""
+  warn "pg_restore output:"
+  cat "$RESTORE_STDERR_FILE" | head -40 | sed 's/^/    /'
+  echo ""
+  die "pg_restore failed (exit code $RESTORE_EXIT). Dev database may be in a partial state — re-run the script to retry."
+fi
 
-if [ -n "$REAL_ERRORS" ]; then
-  warn "Some warnings during restore (usually safe to ignore):"
-  echo "$REAL_ERRORS" | head -20 | sed 's/^/    /'
+# Show any warnings that were emitted even on success (informational only).
+if [ -s "$RESTORE_STDERR_FILE" ]; then
+  warn "pg_restore completed with warnings (non-fatal):"
+  cat "$RESTORE_STDERR_FILE" | head -20 | sed 's/^/    /'
+  echo ""
 fi
 
 ok "Production data restored into dev"
+
+# ── Step 5: Sanity check ──────────────────────────────────────────────────────
+info "Verifying sync (counting merchants in dev)..."
+
+MERCHANT_COUNT=$(psql "$DATABASE_URL" -t -A -c "SELECT COUNT(*) FROM merchants;" 2>/dev/null || echo "0")
+
+if [ "$MERCHANT_COUNT" -eq 0 ]; then
+  die "Sanity check failed — dev database shows 0 merchants after restore. The dump may have been empty or the restore silently produced no rows."
+fi
+
+ok "Verified: ${MERCHANT_COUNT} merchant(s) now in dev database"
 
 echo ""
 
