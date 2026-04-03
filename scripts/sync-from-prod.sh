@@ -32,6 +32,12 @@
 # AFTER RUNNING:
 #   Restart the dev server → log in → use /admin to switch to the merchant.
 #
+# MAINTAINER NOTE:
+#   This script has a hardcoded table list. When you add a new merchant-scoped
+#   table to shared/schema.ts, also add a copy_table() call here in the correct
+#   dependency tier (parents before children). Tables with no direct merchant_id
+#   must use a JOIN query against their parent table instead.
+#
 # =============================================================================
 
 set -euo pipefail
