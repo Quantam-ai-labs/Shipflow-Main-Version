@@ -282,6 +282,10 @@ export async function processConfirmationResponse(params: {
       updateData.roboResponseAt = now;
     }
 
+    if (action === "confirm" || action === "cancel") {
+      updateData.waNextAttemptAt = null;
+    }
+
     const skipTransition = order.workflowStatus === targetStatus;
 
     if (!skipTransition) {
@@ -300,6 +304,10 @@ export async function processConfirmationResponse(params: {
 
       if (!transitionResult.success) {
         console.error(`${LOG_PREFIX} Transition failed for ${orderId}: ${transitionResult.error}`);
+        await db.update(orders).set({
+          waResponseAt: source === "whatsapp" ? now : undefined,
+          waNextAttemptAt: null,
+        }).where(eq(orders.id, orderId));
         return { success: false, action, error: transitionResult.error };
       }
     } else {
@@ -346,8 +354,6 @@ export async function processConfirmationResponse(params: {
     }
 
     if (action === "confirm" || action === "cancel") {
-      await db.update(orders).set({ waNextAttemptAt: null }).where(eq(orders.id, orderId));
-
       if (source === "whatsapp") {
         await logConfirmationEvent({
           merchantId, orderId,

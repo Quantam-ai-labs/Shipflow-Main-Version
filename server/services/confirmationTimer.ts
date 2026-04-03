@@ -300,7 +300,7 @@ async function checkWaReattempts() {
       itemSummary: orders.itemSummary,
     }).from(orders)
       .where(and(
-        notInArray(orders.workflowStatus, ["CANCELLED", "DELIVERED", "RETURN"]),
+        notInArray(orders.workflowStatus, ["CANCELLED", "DELIVERED", "RETURN", "READY_TO_SHIP", "HOLD"]),
         eq(orders.confirmationStatus, "pending"),
         isNull(orders.waResponseAt),
         eq(orders.waNotOnWhatsApp, false),
