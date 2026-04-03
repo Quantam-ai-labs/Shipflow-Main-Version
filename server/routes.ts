@@ -2765,6 +2765,8 @@ export async function registerRoutes(
         workflowStatus: wfStatus,
         shipmentStatus: shipStatusParam,
         rawStatuses: rawStatusesParam,
+        weightFilter: weightFilterParam,
+        agingFilter: agingFilterParam,
       } = req.query;
       const page = parseInt(pageStr as string) || 1;
       const pageSize = parseInt(pageSizeStr as string) || 20;
@@ -2814,6 +2816,45 @@ export async function registerRoutes(
       }
       if (dateTo) {
         conditions.push(sql`${orders.orderDate} <= ${toMerchantEndOfDay(dateTo as string, tz)}`);
+      }
+
+      // Weight filter — courier_weight is stored as grams (decimal)
+      if (weightFilterParam && weightFilterParam !== "all") {
+        const weightGramMap: Record<string, number> = {
+          "500g": 500,
+          "1kg": 1000,
+          "2kg": 2000,
+          "3kg": 3000,
+          "4kg": 4000,
+          "5kg": 5000,
+        };
+        const wf = weightFilterParam as string;
+        if (wf === "above5") {
+          conditions.push(sql`CAST(${orders.courierWeight} AS numeric) > 5000`);
+        } else if (weightGramMap[wf] !== undefined) {
+          conditions.push(sql`CAST(${orders.courierWeight} AS numeric) <= ${weightGramMap[wf]}`);
+        }
+      }
+
+      // Aging filter — computed from fulfillment/dispatch/order date to delivery/return/now
+      if (agingFilterParam && agingFilterParam !== "all") {
+        const af = agingFilterParam as string;
+        const agingDaysSql = sql`
+          EXTRACT(EPOCH FROM (
+            CASE
+              WHEN ${orders.workflowStatus} = 'DELIVERED' AND ${orders.deliveredAt} IS NOT NULL THEN ${orders.deliveredAt}
+              WHEN ${orders.workflowStatus} = 'RETURN' AND ${orders.returnedAt} IS NOT NULL THEN ${orders.returnedAt}
+              ELSE NOW()
+            END
+            - COALESCE(${orders.fulfilledAt}, ${orders.dispatchedAt}, ${orders.orderDate}::timestamp)
+          )) / 86400`;
+        if (af === "normal") {
+          conditions.push(sql`(${agingDaysSql}) <= 4`);
+        } else if (af === "delayed") {
+          conditions.push(sql`(${agingDaysSql}) > 4 AND (${agingDaysSql}) < 6`);
+        } else if (af === "stuck") {
+          conditions.push(sql`(${agingDaysSql}) >= 6`);
+        }
       }
 
       const whereClause = and(...conditions);

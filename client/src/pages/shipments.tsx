@@ -39,6 +39,7 @@ import {
   Loader2,
   AlertTriangle,
   Settings2,
+  Scale,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -211,6 +212,8 @@ export default function Shipments() {
   const [issuesDialogOpen, setIssuesDialogOpen] = useState(false);
   const [issuesSelection, setIssuesSelection] = useState<string[]>([]);
   const [courierFilter, setCourierFilter] = useState("all");
+  const [weightFilter, setWeightFilter] = useState("all");
+  const [agingFilter, setAgingFilter] = useState("all");
   const { dateRange, setDateRange, dateParams } = useDateRange();
   const [page, setPage] = useState(1);
   const pageSize = 100;
@@ -292,6 +295,8 @@ export default function Shipments() {
       ? { rawStatuses: savedIssueStatuses.join(",") }
       : shipmentStatusFilter !== "all" ? { shipmentStatus: shipmentStatusFilter } : {}),
     ...(courierFilter !== "all" && { courier: courierFilter }),
+    ...(weightFilter !== "all" && { weightFilter }),
+    ...(agingFilter !== "all" && { agingFilter }),
     ...(!search && dateParams.dateFrom && { dateFrom: dateParams.dateFrom }),
     ...(!search && dateParams.dateTo && { dateTo: dateParams.dateTo }),
   });
@@ -537,6 +542,34 @@ export default function Shipments() {
                       {courierOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={weightFilter} onValueChange={(v) => { setWeightFilter(v); setPage(1); }}>
+                    <SelectTrigger className="w-[150px]" data-testid="select-shipment-weight">
+                      <Scale className="w-4 h-4 mr-2" />
+                      <SelectValue placeholder="Weight" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Weights</SelectItem>
+                      <SelectItem value="500g">Up to 500g</SelectItem>
+                      <SelectItem value="1kg">Up to 1 kg</SelectItem>
+                      <SelectItem value="2kg">Up to 2 kg</SelectItem>
+                      <SelectItem value="3kg">Up to 3 kg</SelectItem>
+                      <SelectItem value="4kg">Up to 4 kg</SelectItem>
+                      <SelectItem value="5kg">Up to 5 kg</SelectItem>
+                      <SelectItem value="above5">Above 5 kg</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={agingFilter} onValueChange={(v) => { setAgingFilter(v); setPage(1); }}>
+                    <SelectTrigger className="w-[175px]" data-testid="select-shipment-aging">
+                      <Clock className="w-4 h-4 mr-2" />
+                      <SelectValue placeholder="Aging" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Aging</SelectItem>
+                      <SelectItem value="normal">Normal (≤4 days)</SelectItem>
+                      <SelectItem value="delayed">Delayed (5 days)</SelectItem>
+                      <SelectItem value="stuck">Stuck (6+ days)</SelectItem>
                     </SelectContent>
                   </Select>
                   <DateRangePicker
