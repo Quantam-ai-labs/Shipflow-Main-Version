@@ -91,11 +91,21 @@ read -r CONFIRM
 echo ""
 [ "$CONFIRM" != "YES" ] && { echo "Aborted."; exit 0; }
 
+# ── Cleanup trap: if sync fails mid-way, remove partial data ─────────────────
+SYNC_COMPLETE=false
+cleanup_on_failure() {
+  if [ "${SYNC_COMPLETE}" != "true" ] && [ -n "${MID:-}" ]; then
+    echo ""
+    warn "Sync failed — removing partial data from dev to restore clean state..."
+    psql "$DATABASE_URL" -c "DELETE FROM merchants WHERE id = '${MID}';" -q 2>/dev/null || true
+    warn "Dev is back to its pre-sync state. Fix the error above and re-run."
+  fi
+}
+trap cleanup_on_failure EXIT
+
 # ── copy_table ────────────────────────────────────────────────────────────────
 # Streams rows from prod to dev using psql COPY TO STDOUT / FROM STDIN.
-# A failed copy (e.g. table not yet in dev) prints a warning and continues.
-COPIED=0; SKIPPED=0
-
+# Any failure is fatal — the EXIT trap will clean up partial data.
 copy_table() {
   local TABLE="$1"
   local QUERY="$2"
@@ -103,14 +113,9 @@ copy_table() {
   CNT=$(psql "$PROD_DATABASE_URL" -t -A \
     -c "SELECT COUNT(*) FROM (${QUERY}) _c" 2>/dev/null || echo "?")
   printf "  %-45s %6s rows  " "$TABLE" "$CNT"
-  if psql "$PROD_DATABASE_URL" -c "COPY (${QUERY}) TO STDOUT" 2>/dev/null \
-     | psql "$DATABASE_URL"    -c "COPY ${TABLE} FROM STDIN" 2>/dev/null; then
-    echo "OK"
-    COPIED=$((COPIED + 1))
-  else
-    echo "[skipped — not in dev schema yet]"
-    SKIPPED=$((SKIPPED + 1))
-  fi
+  psql "$PROD_DATABASE_URL" -c "COPY (${QUERY}) TO STDOUT" 2>/dev/null \
+    | psql "$DATABASE_URL"  -c "COPY ${TABLE} FROM STDIN" 2>/dev/null
+  echo "OK"
 }
 
 # ── Step 1: Delete existing merchant from dev (CASCADE cleans all children) ───
@@ -236,15 +241,17 @@ copy_table wa_failed_events \
 
 echo ""
 
-# ── Sanity check ──────────────────────────────────────────────────────────────
+# ── Sanity check — enforced; fails the run if 0 orders ───────────────────────
 info "Sanity check..."
 ORDER_COUNT=$(psql "$DATABASE_URL" -t -A \
   -c "SELECT COUNT(*) FROM orders WHERE merchant_id = '${MID}'" 2>/dev/null || echo "0")
 if [ "${ORDER_COUNT}" -eq 0 ]; then
-  warn "0 orders found for ${MNAME} in dev after sync."
-  warn "The merchant may have no orders, or something went wrong — re-run the script."
+  die "Sanity check failed: 0 orders found for '${MNAME}' in dev after sync. The sync did not produce usable data. Re-run the script."
 fi
 ok "Orders in dev for ${MNAME}: ${ORDER_COUNT}"
+
+# Mark sync complete so the cleanup trap does NOT wipe the data on exit
+SYNC_COMPLETE=true
 
 echo ""
 echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
@@ -252,7 +259,6 @@ echo -e "${GREEN}${BOLD}║   ✓  Sync complete!                               
 echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 ok "Merchant : ${MNAME}"
-ok "Tables   : ${COPIED} copied, ${SKIPPED} skipped"
 ok "Orders   : ${ORDER_COUNT}"
 echo ""
 ok "What's next:"
