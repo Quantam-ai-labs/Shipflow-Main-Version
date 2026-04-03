@@ -55,6 +55,9 @@ VAPID_SUBJECT = "mailto:support@1sol.ai"
 WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID = "1185244366831820"
 FACEBOOK_APP_ID = "889033150817848"
 
+[userenv.development]
+PROD_DATABASE_URL = "postgresql://neondb_owner:npg_0c3shAEpHZPF@ep-empty-tree-ahx3xpe6.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require"
+
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
