@@ -2820,19 +2820,24 @@ export async function registerRoutes(
 
       // Weight filter — courier_weight is stored as grams (decimal)
       if (weightFilterParam && weightFilterParam !== "all") {
-        const weightGramMap: Record<string, number> = {
-          "500g": 500,
-          "1kg": 1000,
-          "2kg": 2000,
-          "3kg": 3000,
-          "4kg": 4000,
-          "5kg": 5000,
+        const weightRangeMap: Record<string, { min: number; max: number; minInclusive?: boolean }> = {
+          "500g": { min: 0, max: 500, minInclusive: true },
+          "1kg":  { min: 500, max: 1000 },
+          "2kg":  { min: 1000, max: 2000 },
+          "3kg":  { min: 2000, max: 3000 },
+          "4kg":  { min: 3000, max: 4000 },
+          "5kg":  { min: 4000, max: 5000 },
         };
         const wf = weightFilterParam as string;
         if (wf === "above5") {
           conditions.push(sql`CAST(${orders.courierWeight} AS numeric) > 5000`);
-        } else if (weightGramMap[wf] !== undefined) {
-          conditions.push(sql`CAST(${orders.courierWeight} AS numeric) <= ${weightGramMap[wf]}`);
+        } else if (weightRangeMap[wf] !== undefined) {
+          const { min, max, minInclusive } = weightRangeMap[wf];
+          if (minInclusive) {
+            conditions.push(sql`CAST(${orders.courierWeight} AS numeric) >= ${min} AND CAST(${orders.courierWeight} AS numeric) <= ${max}`);
+          } else {
+            conditions.push(sql`CAST(${orders.courierWeight} AS numeric) > ${min} AND CAST(${orders.courierWeight} AS numeric) <= ${max}`);
+          }
         }
       }
 
