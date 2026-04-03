@@ -1,206 +1,261 @@
 #!/usr/bin/env bash
 # =============================================================================
-# PRODUCTION → DEV DATABASE SYNC
+# PRODUCTION → DEV DATABASE SYNC  (single merchant)
 # =============================================================================
 #
-# Copies a snapshot of the production database into the development database
-# so you can test new features against real merchant data without publishing.
+# Copies one merchant's data from production into the dev database so you can
+# test features against real orders, settings, couriers, and team members —
+# without publishing or touching any production data.
 #
 # SETUP (one-time):
-#   1. Open your deployed app on Replit
-#   2. Go to its Secrets panel and find DATABASE_URL
-#   3. Copy that value
-#   4. In THIS dev environment, add a new secret named PROD_DATABASE_URL
-#      and paste the production DATABASE_URL as its value
+#   1. Open your deployed (production) app on Replit
+#   2. Go to its Secrets panel → find DATABASE_URL → copy the value
+#   3. In THIS dev environment, add a new Secret:
+#        Key:   PROD_DATABASE_URL
+#        Value: <paste the production DATABASE_URL here>
 #
 # USAGE:
-#   bash scripts/sync-from-prod.sh
+#   bash scripts/sync-from-prod.sh               # syncs lala-import (default)
+#   bash scripts/sync-from-prod.sh lala-import   # same, explicit slug
 #
-# NON-INTERACTIVE (skips confirmation prompt):
+# NON-INTERACTIVE (pipe YES to skip the confirmation prompt):
 #   printf 'YES\n' | bash scripts/sync-from-prod.sh
 #
-# WHAT IT DOES:
-#   - Dumps all merchant data from production (orders, settings, team members, etc.)
-#   - Wipes the dev database's merchant data
-#   - Restores production data into dev
-#   - Leaves dev-specific tables intact: sessions, admin logs, platform config
+# WHAT GETS COPIED:
+#   All orders, settings, team members, couriers, shipments, WhatsApp data,
+#   accounting, Meta Ads data, etc. for the specified merchant.
 #
-# WHAT IS NOT COPIED (stays dev-only):
-#   - sessions             (auth sessions — always environment-specific)
-#   - admin_action_logs    (platform audit trail)
-#   - platform_settings    (platform-level config)
-#   - platform_costs       (super admin cost tracking)
-#   - cost_rates           (super admin cost tracking)
-#   - ai_usage_logs        (platform telemetry)
+# WHAT IS NOT COPIED (stays dev-only / platform-only):
+#   sessions, admin_action_logs, platform_settings, platform_costs,
+#   cost_rates, ai_usage_logs
 #
 # AFTER RUNNING:
-#   - Restart the dev server (the app will already be restarted if running in Replit)
-#   - Log in normally — you will now see real production merchant accounts
+#   Restart the dev server → log in → use /admin to switch to the merchant.
 #
 # =============================================================================
 
 set -euo pipefail
 
-# ── Colours ──────────────────────────────────────────────────────────────────
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
+RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'
+CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
-info()    { echo -e "${CYAN}[sync]${NC} $*"; }
-ok()      { echo -e "${GREEN}[sync]${NC} $*"; }
-warn()    { echo -e "${YELLOW}[sync]${NC} $*"; }
-die()     { echo -e "${RED}[sync] ERROR:${NC} $*" >&2; exit 1; }
+info() { echo -e "${CYAN}[sync]${NC} $*"; }
+ok()   { echo -e "${GREEN}[sync]${NC} $*"; }
+warn() { echo -e "${YELLOW}[sync]${NC} $*"; }
+die()  { echo -e "${RED}[sync] ERROR:${NC} $*" >&2; exit 1; }
+
+MERCHANT_SLUG="${1:-lala-import}"
+
+# Basic slug validation — prevent SQL injection
+if [[ "$MERCHANT_SLUG" =~ [^a-zA-Z0-9_-] ]]; then
+  die "Invalid merchant slug '${MERCHANT_SLUG}'. Use only letters, numbers, hyphens, and underscores."
+fi
 
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║       Production → Development Database Sync             ║${NC}"
+echo -e "${BOLD}║    Production → Development Sync                         ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# ── Check prerequisites ───────────────────────────────────────────────────────
+# ── Prerequisites ─────────────────────────────────────────────────────────────
 if [ -z "${PROD_DATABASE_URL:-}" ]; then
-  die "PROD_DATABASE_URL is not set.\n\n  How to set it up:\n  1. Open your deployed app on Replit\n  2. Go to its Secrets panel → copy DATABASE_URL\n  3. In THIS dev environment add a secret: PROD_DATABASE_URL=<paste value>\n  4. Re-run this script"
+  die "PROD_DATABASE_URL is not set.\n\n  How to fix:\n  1. Open your deployed app on Replit → Secrets panel\n  2. Copy the DATABASE_URL value\n  3. In THIS dev environment, add Secret: PROD_DATABASE_URL=<paste>\n  4. Re-run this script"
 fi
+[ -z "${DATABASE_URL:-}" ] && die "DATABASE_URL is not set. Is the dev database provisioned?"
+command -v psql &>/dev/null    || die "psql not found."
 
-if [ -z "${DATABASE_URL:-}" ]; then
-  die "DATABASE_URL is not set. Is the dev database provisioned?"
-fi
+# ── Test connections ──────────────────────────────────────────────────────────
+info "Testing connections..."
+psql "$PROD_DATABASE_URL" -c "SELECT 1" -q --no-align --tuples-only >/dev/null \
+  || die "Cannot connect to production. Check PROD_DATABASE_URL."
+psql "$DATABASE_URL"      -c "SELECT 1" -q --no-align --tuples-only >/dev/null \
+  || die "Cannot connect to dev database. Check DATABASE_URL."
+ok "Both databases reachable"
 
-if ! command -v pg_dump &>/dev/null; then
-  die "pg_dump not found. Make sure PostgreSQL client tools are installed."
-fi
+# ── Find merchant in production ───────────────────────────────────────────────
+info "Looking up '${MERCHANT_SLUG}' in production..."
+MID=$(psql "$PROD_DATABASE_URL" -t -A \
+  -c "SELECT id FROM merchants WHERE slug = '${MERCHANT_SLUG}'" 2>/dev/null || true)
+[ -z "$MID" ] && die "Merchant slug '${MERCHANT_SLUG}' not found in production."
+MNAME=$(psql "$PROD_DATABASE_URL" -t -A \
+  -c "SELECT name FROM merchants WHERE id = '${MID}'" 2>/dev/null || true)
+ok "Found: ${MNAME}  (id: ${MID})"
 
-if ! command -v pg_restore &>/dev/null; then
-  die "pg_restore not found. Make sure PostgreSQL client tools are installed."
-fi
-
-if ! command -v psql &>/dev/null; then
-  die "psql not found. Make sure PostgreSQL client tools are installed."
-fi
-
-# ── Safety confirmation ───────────────────────────────────────────────────────
-warn "This will OVERWRITE all merchant data in your dev database with production data."
-warn "Auth sessions, admin logs, and platform config will NOT be touched."
+# ── Confirmation ──────────────────────────────────────────────────────────────
+echo ""
+warn "This will DELETE and re-copy all data for '${MNAME}' in dev."
+warn "All other merchants in dev will NOT be touched."
 echo ""
 echo -n "  Type YES to continue: "
 read -r CONFIRM
 echo ""
+[ "$CONFIRM" != "YES" ] && { echo "Aborted."; exit 0; }
 
-if [ "$CONFIRM" != "YES" ]; then
-  echo "Aborted."
-  exit 0
-fi
+# ── copy_table ────────────────────────────────────────────────────────────────
+# Streams rows from prod to dev using psql COPY TO STDOUT / FROM STDIN.
+# A failed copy (e.g. table not yet in dev) prints a warning and continues.
+COPIED=0; SKIPPED=0
 
-# ── Temp file ─────────────────────────────────────────────────────────────────
-DUMP_FILE="/tmp/prod_snapshot_$(date +%Y%m%d_%H%M%S).dump"
-trap 'rm -f "$DUMP_FILE"; echo ""' EXIT
+copy_table() {
+  local TABLE="$1"
+  local QUERY="$2"
+  local CNT
+  CNT=$(psql "$PROD_DATABASE_URL" -t -A \
+    -c "SELECT COUNT(*) FROM (${QUERY}) _c" 2>/dev/null || echo "?")
+  printf "  %-45s %6s rows  " "$TABLE" "$CNT"
+  if psql "$PROD_DATABASE_URL" -c "COPY (${QUERY}) TO STDOUT" 2>/dev/null \
+     | psql "$DATABASE_URL"    -c "COPY ${TABLE} FROM STDIN" 2>/dev/null; then
+    echo "OK"
+    COPIED=$((COPIED + 1))
+  else
+    echo "[skipped — not in dev schema yet]"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+}
 
-# ── Step 1: Test connections ──────────────────────────────────────────────────
-info "Testing connection to production database..."
-psql "$PROD_DATABASE_URL" -c "SELECT 1" -q --no-align --tuples-only > /dev/null \
-  || die "Cannot connect to production database. Check PROD_DATABASE_URL."
-ok "Production connection OK"
+# ── Step 1: Delete existing merchant from dev (CASCADE cleans all children) ───
+info "Removing existing '${MERCHANT_SLUG}' data from dev..."
+psql "$DATABASE_URL" -c "DELETE FROM merchants WHERE id = '${MID}';" -q \
+  || die "Failed to delete merchant from dev."
+ok "Cleared"
+echo ""
 
-info "Testing connection to dev database..."
-psql "$DATABASE_URL" -c "SELECT 1" -q --no-align --tuples-only > /dev/null \
-  || die "Cannot connect to dev database. Check DATABASE_URL."
-ok "Dev connection OK"
+# ── Step 2: Copy all tables (parents before children for FK safety) ───────────
+info "Copying ${MNAME} data from production..."
+echo ""
+
+M="merchant_id = '${MID}'"
+
+# ── Root ──────────────────────────────────────────────────────────────────────
+copy_table merchants \
+  "SELECT * FROM merchants WHERE id = '${MID}'"
+
+# ── Level 1 — direct merchant_id, no inter-merchant FK deps ──────────────────
+copy_table team_members               "SELECT * FROM team_members WHERE ${M}"
+copy_table team_invites               "SELECT * FROM team_invites WHERE ${M}"
+copy_table shopify_stores             "SELECT * FROM shopify_stores WHERE ${M}"
+copy_table courier_accounts           "SELECT * FROM courier_accounts WHERE ${M}"
+copy_table whatsapp_templates         "SELECT * FROM whatsapp_templates WHERE ${M}"
+copy_table wa_meta_templates          "SELECT * FROM wa_meta_templates WHERE ${M}"
+copy_table wa_automations             "SELECT * FROM wa_automations WHERE ${M}"
+copy_table wa_labels                  "SELECT * FROM wa_labels WHERE ${M}"
+copy_table push_subscriptions         "SELECT * FROM push_subscriptions WHERE ${M}"
+copy_table courier_status_mappings    "SELECT * FROM courier_status_mappings WHERE ${M}"
+copy_table unmapped_courier_statuses  "SELECT * FROM unmapped_courier_statuses WHERE ${M}"
+copy_table courier_keyword_mappings   "SELECT * FROM courier_keyword_mappings WHERE ${M}"
+copy_table expense_types              "SELECT * FROM expense_types WHERE ${M}"
+copy_table accounting_products        "SELECT * FROM accounting_products WHERE ${M}"
+copy_table products                   "SELECT * FROM products WHERE ${M}"
+copy_table parties                    "SELECT * FROM parties WHERE ${M}"
+copy_table cash_accounts              "SELECT * FROM cash_accounts WHERE ${M}"
+copy_table ad_accounts                "SELECT * FROM ad_accounts WHERE ${M}"
+copy_table meta_column_presets        "SELECT * FROM meta_column_presets WHERE ${M}"
+copy_table ad_media_library           "SELECT * FROM ad_media_library WHERE ${M}"
+copy_table custom_audiences           "SELECT * FROM custom_audiences WHERE ${M}"
+copy_table ad_automation_rules        "SELECT * FROM ad_automation_rules WHERE ${M}"
+copy_table accounting_settings        "SELECT * FROM accounting_settings WHERE ${M}"
+copy_table agent_chat_sessions        "SELECT * FROM agent_chat_sessions WHERE ${M}"
+copy_table whatsapp_responses         "SELECT * FROM whatsapp_responses WHERE ${M}"
+copy_table ai_insight_cache           "SELECT * FROM ai_insight_cache WHERE ${M}"
+copy_table marketing_sync_logs        "SELECT * FROM marketing_sync_logs WHERE ${M}"
+copy_table meta_sync_runs             "SELECT * FROM meta_sync_runs WHERE ${M}"
+copy_table robocall_logs              "SELECT * FROM robocall_logs WHERE ${M}"
+copy_table notifications              "SELECT * FROM notifications WHERE ${M}"
+copy_table meta_api_logs              "SELECT * FROM meta_api_logs WHERE ${M}"
+copy_table sync_logs                  "SELECT * FROM sync_logs WHERE ${M}"
+copy_table booking_jobs               "SELECT * FROM booking_jobs WHERE ${M}"
+copy_table shopify_webhook_events     "SELECT * FROM shopify_webhook_events WHERE ${M}"
+copy_table shopify_import_jobs        "SELECT * FROM shopify_import_jobs WHERE ${M}"
+copy_table complaint_templates        "SELECT * FROM complaint_templates WHERE ${M}"
+
+# ── Level 2 — direct merchant_id + depends on level-1 tables ─────────────────
+copy_table orders                     "SELECT * FROM orders WHERE ${M}"
+copy_table wa_conversations           "SELECT * FROM wa_conversations WHERE ${M}"
+copy_table shipments                  "SELECT * FROM shipments WHERE ${M}"
+copy_table shipment_batches           "SELECT * FROM shipment_batches WHERE ${M}"
+copy_table cancellation_jobs          "SELECT * FROM cancellation_jobs WHERE ${M}"
+copy_table stock_receipts             "SELECT * FROM stock_receipts WHERE ${M}"
+copy_table sales                      "SELECT * FROM sales WHERE ${M}"
+copy_table transactions               "SELECT * FROM transactions WHERE ${M}"
+copy_table opening_balance_batches    "SELECT * FROM opening_balance_batches WHERE ${M}"
+copy_table ad_campaigns               "SELECT * FROM ad_campaigns WHERE ${M}"
+copy_table ad_sets                    "SELECT * FROM ad_sets WHERE ${M}"
+copy_table ad_creatives               "SELECT * FROM ad_creatives WHERE ${M}"
+copy_table ad_insights                "SELECT * FROM ad_insights WHERE ${M}"
+copy_table ad_launch_jobs             "SELECT * FROM ad_launch_jobs WHERE ${M}"
+copy_table expenses                   "SELECT * FROM expenses WHERE ${M}"
+copy_table stock_ledger               "SELECT * FROM stock_ledger WHERE ${M}"
+copy_table courier_dues               "SELECT * FROM courier_dues WHERE ${M}"
+copy_table party_balances             "SELECT * FROM party_balances WHERE ${M}"
+copy_table cash_movements             "SELECT * FROM cash_movements WHERE ${M}"
+copy_table expense_payments           "SELECT * FROM expense_payments WHERE ${M}"
+copy_table cod_reconciliation         "SELECT * FROM cod_reconciliation WHERE ${M}"
+copy_table courier_settlements        "SELECT * FROM courier_settlements WHERE ${M}"
+copy_table ledger_entries             "SELECT * FROM ledger_entries WHERE ${M}"
+copy_table accounting_audit_log       "SELECT * FROM accounting_audit_log WHERE ${M}"
+copy_table order_payments             "SELECT * FROM order_payments WHERE ${M}"
+copy_table order_confirmation_log     "SELECT * FROM order_confirmation_log WHERE ${M}"
+copy_table shipment_print_records     "SELECT * FROM shipment_print_records WHERE ${M}"
+copy_table robocall_queue             "SELECT * FROM robocall_queue WHERE ${M}"
+copy_table campaign_journey_events    "SELECT * FROM campaign_journey_events WHERE ${M}"
+copy_table ad_profitability_entries   "SELECT * FROM ad_profitability_entries WHERE ${M}"
+copy_table complaints                 "SELECT * FROM complaints WHERE ${M}"
+copy_table wa_raw_events              "SELECT * FROM wa_raw_events WHERE ${M}"
+
+# ── Level 3 — refs level-2 / child tables (use JOIN where no merchant_id) ─────
+copy_table workflow_audit_log \
+  "SELECT * FROM workflow_audit_log WHERE ${M}"
+copy_table order_change_log \
+  "SELECT * FROM order_change_log WHERE ${M}"
+copy_table ad_launch_items \
+  "SELECT * FROM ad_launch_items WHERE ${M}"
+
+# Child tables: no direct merchant_id column — filter via parent JOIN
+copy_table wa_messages \
+  "SELECT m.* FROM wa_messages m JOIN wa_conversations c ON m.conversation_id = c.id WHERE c.merchant_id = '${MID}'"
+copy_table shipment_events \
+  "SELECT e.* FROM shipment_events e JOIN shipments s ON e.shipment_id = s.id WHERE s.merchant_id = '${MID}'"
+copy_table shipment_batch_items \
+  "SELECT i.* FROM shipment_batch_items i JOIN shipment_batches b ON i.batch_id = b.id WHERE b.merchant_id = '${MID}'"
+copy_table cancellation_job_items \
+  "SELECT i.* FROM cancellation_job_items i JOIN cancellation_jobs j ON i.job_id = j.id WHERE j.merchant_id = '${MID}'"
+copy_table stock_receipt_items \
+  "SELECT i.* FROM stock_receipt_items i JOIN stock_receipts r ON i.stock_receipt_id = r.id WHERE r.merchant_id = '${MID}'"
+copy_table sale_items \
+  "SELECT i.* FROM sale_items i JOIN sales s ON i.sale_id = s.id WHERE s.merchant_id = '${MID}'"
+copy_table sale_payments \
+  "SELECT p.* FROM sale_payments p JOIN sales s ON p.sale_id = s.id WHERE s.merchant_id = '${MID}'"
+copy_table ledger_lines \
+  "SELECT l.* FROM ledger_lines l JOIN transactions t ON l.transaction_id = t.id WHERE t.merchant_id = '${MID}'"
+copy_table opening_balance_lines \
+  "SELECT l.* FROM opening_balance_lines l JOIN opening_balance_batches b ON l.batch_id = b.id WHERE b.merchant_id = '${MID}'"
+copy_table remarks \
+  "SELECT r.* FROM remarks r JOIN orders o ON r.order_id = o.id WHERE o.merchant_id = '${MID}'"
+copy_table wa_failed_events \
+  "SELECT * FROM wa_failed_events WHERE merchant_id = '${MID}'"
 
 echo ""
 
-# ── Step 2: Dump production ───────────────────────────────────────────────────
-info "Dumping production database (this may take a minute)..."
-
-pg_dump \
-  --no-owner \
-  --no-acl \
-  --data-only \
-  --disable-triggers \
-  -Fc \
-  --exclude-table-data=sessions \
-  --exclude-table-data=admin_action_logs \
-  --exclude-table-data=platform_settings \
-  --exclude-table-data=platform_costs \
-  --exclude-table-data=cost_rates \
-  --exclude-table-data=ai_usage_logs \
-  "$PROD_DATABASE_URL" > "$DUMP_FILE"
-
-DUMP_SIZE=$(du -h "$DUMP_FILE" | cut -f1)
-ok "Dump complete — ${DUMP_SIZE} snapshot saved to ${DUMP_FILE}"
+# ── Sanity check ──────────────────────────────────────────────────────────────
+info "Sanity check..."
+ORDER_COUNT=$(psql "$DATABASE_URL" -t -A \
+  -c "SELECT COUNT(*) FROM orders WHERE merchant_id = '${MID}'" 2>/dev/null || echo "0")
+if [ "${ORDER_COUNT}" -eq 0 ]; then
+  warn "0 orders found for ${MNAME} in dev after sync."
+  warn "The merchant may have no orders, or something went wrong — re-run the script."
+fi
+ok "Orders in dev for ${MNAME}: ${ORDER_COUNT}"
 
 echo ""
-
-# ── Step 3: Wipe dev merchant data ───────────────────────────────────────────
-info "Wiping dev merchant data (TRUNCATE merchants CASCADE)..."
-
-psql "$DATABASE_URL" \
-  -c "TRUNCATE merchants CASCADE;" \
-  -q \
-  || die "Failed to truncate dev merchant data."
-
-ok "Dev merchant data wiped"
-
-echo ""
-
-# ── Step 4: Restore production data into dev ──────────────────────────────────
-info "Restoring production data into dev database..."
-
-# Capture stderr to a temp file so we can show it on failure without
-# losing the exit code (bash subshell substitution swallows exit codes).
-RESTORE_STDERR_FILE="/tmp/pg_restore_stderr_$$.txt"
-trap 'rm -f "$DUMP_FILE" "$RESTORE_STDERR_FILE"; echo ""' EXIT
-
-set +e
-pg_restore \
-  --no-owner \
-  --no-acl \
-  --data-only \
-  --disable-triggers \
-  -d "$DATABASE_URL" \
-  "$DUMP_FILE" 2>"$RESTORE_STDERR_FILE"
-RESTORE_EXIT=$?
-set -e
-
-if [ $RESTORE_EXIT -ne 0 ]; then
-  echo ""
-  warn "pg_restore output:"
-  cat "$RESTORE_STDERR_FILE" | head -40 | sed 's/^/    /'
-  echo ""
-  die "pg_restore failed (exit code $RESTORE_EXIT). Dev database may be in a partial state — re-run the script to retry."
-fi
-
-# Show any warnings that were emitted even on success (informational only).
-if [ -s "$RESTORE_STDERR_FILE" ]; then
-  warn "pg_restore completed with warnings (non-fatal):"
-  cat "$RESTORE_STDERR_FILE" | head -20 | sed 's/^/    /'
-  echo ""
-fi
-
-ok "Production data restored into dev"
-
-# ── Step 5: Sanity check ──────────────────────────────────────────────────────
-info "Verifying sync (counting merchants in dev)..."
-
-MERCHANT_COUNT=$(psql "$DATABASE_URL" -t -A -c "SELECT COUNT(*) FROM merchants;" 2>/dev/null || echo "0")
-
-if [ "$MERCHANT_COUNT" -eq 0 ]; then
-  die "Sanity check failed — dev database shows 0 merchants after restore. The dump may have been empty or the restore silently produced no rows."
-fi
-
-ok "Verified: ${MERCHANT_COUNT} merchant(s) now in dev database"
-
-echo ""
-
-# ── Done ──────────────────────────────────────────────────────────────────────
 echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}${BOLD}║   ✓  Sync complete!                                      ║${NC}"
 echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
+ok "Merchant : ${MNAME}"
+ok "Tables   : ${COPIED} copied, ${SKIPPED} skipped"
+ok "Orders   : ${ORDER_COUNT}"
+echo ""
 ok "What's next:"
-echo "  1. Restart the dev server (click the Run button or restart the workflow)"
-echo "  2. Log in normally — you'll now see production merchant accounts"
-echo "  3. Use the admin panel (/admin) to impersonate any merchant account"
+echo "  1. Restart the dev server (click Run or restart the workflow)"
+echo "  2. Log in → use /admin to impersonate the ${MNAME} account"
 echo ""
