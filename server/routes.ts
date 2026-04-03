@@ -2839,15 +2839,16 @@ export async function registerRoutes(
       // Aging filter — computed from fulfillment/dispatch/order date to delivery/return/now
       if (agingFilterParam && agingFilterParam !== "all") {
         const af = agingFilterParam as string;
+        // FLOOR matches Math.floor() used in getAgingBadge() on the frontend
         const agingDaysSql = sql`
-          EXTRACT(EPOCH FROM (
+          FLOOR(EXTRACT(EPOCH FROM (
             CASE
               WHEN ${orders.workflowStatus} = 'DELIVERED' AND ${orders.deliveredAt} IS NOT NULL THEN ${orders.deliveredAt}
               WHEN ${orders.workflowStatus} = 'RETURN' AND ${orders.returnedAt} IS NOT NULL THEN ${orders.returnedAt}
               ELSE NOW()
             END
             - COALESCE(${orders.fulfilledAt}, ${orders.dispatchedAt}, ${orders.orderDate}::timestamp)
-          )) / 86400`;
+          )) / 86400)`;
         if (af === "normal") {
           conditions.push(sql`(${agingDaysSql}) <= 4`);
         } else if (af === "delayed") {
