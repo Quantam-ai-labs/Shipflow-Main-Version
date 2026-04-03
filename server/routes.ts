@@ -2835,6 +2835,7 @@ export async function registerRoutes(
             remark: orders.remark,
             orderDate: orders.orderDate,
             dispatchedAt: orders.dispatchedAt,
+            fulfilledAt: orders.fulfilledAt,
             deliveredAt: orders.deliveredAt,
             returnedAt: orders.returnedAt,
             shipmentStatus: orders.shipmentStatus,

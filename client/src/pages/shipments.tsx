@@ -126,6 +126,7 @@ interface ShipmentOrder {
   remark: string | null;
   orderDate: string | null;
   dispatchedAt: string | null;
+  fulfilledAt: string | null;
   deliveredAt: string | null;
   returnedAt: string | null;
   shipmentStatus: string | null;
@@ -134,6 +135,37 @@ interface ShipmentOrder {
   lastTrackingUpdate: string | null;
   prepaidAmount: string | null;
   paymentMethod: string | null;
+}
+
+function getAgingBadge(order: ShipmentOrder) {
+  if (!order.fulfilledAt) return <span className="text-muted-foreground/40 text-xs">—</span>;
+  const start = new Date(order.fulfilledAt).getTime();
+  const end =
+    order.workflowStatus === "DELIVERED" && order.deliveredAt
+      ? new Date(order.deliveredAt).getTime()
+      : order.workflowStatus === "RETURN" && order.returnedAt
+      ? new Date(order.returnedAt).getTime()
+      : Date.now();
+  const days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
+  if (days <= 4) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+        {days}d
+      </span>
+    );
+  }
+  if (days < 6) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 whitespace-nowrap">
+        {days}d
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 whitespace-nowrap">
+      {days}d
+    </span>
+  );
 }
 
 interface ShipmentsResponse {
@@ -569,6 +601,7 @@ export default function Shipments() {
                           <TableHead className="text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount</TableHead>
                           <TableHead className="text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Wt.</TableHead>
                           <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Stage</TableHead>
+                          <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Aging</TableHead>
                           <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Courier Status</TableHead>
                           <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Remarks</TableHead>
                           <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Date</TableHead>
@@ -616,6 +649,9 @@ export default function Shipments() {
                             </TableCell>
                             <TableCell data-testid={`badge-status-${order.id}`}>
                               {getWorkflowBadge(order.workflowStatus)}
+                            </TableCell>
+                            <TableCell data-testid={`text-aging-${order.id}`}>
+                              {getAgingBadge(order)}
                             </TableCell>
                             <TableCell className="text-sm">
                               {order.courierRawStatus ? getCourierStatusBadge(order.courierRawStatus) : <span className="text-muted-foreground/40 text-xs">—</span>}
